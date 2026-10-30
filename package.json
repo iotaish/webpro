@@ -2,9 +2,11 @@
   "name": "node-http-server",
   "version": "1.0.0",
   "description": "Node.js example server starter project",
-  "main": "src/index.js",
+  "main": "app5.js",
+  "type": "commonjs",
   "scripts": {
-    "start": "node app4.js"
+    "start": "node app5.js",
+    "dr": "deno run --allow-net --allow-read --allow-env app5.js"
   },
   "dependencies": {
     "ejs": "^3.1.10",
