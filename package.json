@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node app5.js",
-    "dr": "deno run --allow-net --allow-read --allow-env app5.js"
+    "dr": "deno run --allow-net --allow-read --allow-write --allow-env app5.js"
   },
   "dependencies": {
     "ejs": "^3.1.10",
