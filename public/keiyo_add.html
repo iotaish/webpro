@@ -5,17 +5,20 @@
     <title>駅を追加する</title>
 </head>
 <body>
-    <form action="/keiyo_add">
+    <h2>駅の追加</h2>
+    <form action="/keiyo_add" method="POST">
         <label for="id">ID</label>
-        <input type="number" name="id" id="id" required>
+        <input type="number" name="id" id="id" required><br><br>
 
         <label for="code">Code</label>
-        <input type="text" name="code" id="code" required>
+        <input type="text" name="code" id="code" required><br><br>
 
         <label for="name">駅名</label>
-        <input type="text" name="name" id="name" required>
+        <input type="text" name="name" id="name" required><br><br>
 
-        <input type="submit" values="登録">
+        <input type="submit" value="登録">
     </form>
+    <br>
+    <a href="/keiyo">駅一覧に戻る</a>
 </body>
 </html>

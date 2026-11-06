@@ -117,14 +117,14 @@ app.get("/keiyo", (req, res) => {
   res.render('db1', { data: station });
 });
 
-app.get("/keiyo_add", (req, res) => {
-  let id = req.query.id;
-  let code = req.query.code;
-  let name = req.query.name;
+app.post("/keiyo_add", (req, res) => {
+  const body = req.body || {};
+  let id = Number(body.id);
+  let code = body.code;
+  let name = body.name;
   let newdata = { id: id, code: code, name: name };
-  station.push( newdata );
-  res.redirect('/public/keiyo_add.html');
-  // res.render('db1', { data: station });
+  station.push(newdata);
+  res.redirect('/keiyo');
 });
 
 const { DatabaseSync } = require("node:sqlite");
