@@ -126,4 +126,28 @@ app.get("/keiyo_add", (req, res) => {
   // res.render('db1', { data: station });
 });
 
+let classes = [
+  { id: 1, course: "Webプログラミング", day: "金", period: "3-4限", room: "7104" },
+  { id: 2, course: "情報ネットワーク", day: "金", period: "2-3限", room: "1231" },
+  { id: 3, course: "アジャイルワーク１", day: "水", period: "5-8限", room: "7212" },
+  { id: 4, course: "建築構造材料", day: "金", period: "2-3限", room: "1102" },
+  { id: 5, course: "AI・プログラミング基礎演習", day: "金", period: "7-8限", room: "8103" },
+];
+
+app.get("/classes", (req, res) => {
+  res.render("classes", { data: classes });
+});
+
+app.get("/classes_add", (req, res) => {
+  let id = req.query.id;
+  let course = req.query.course;
+  let day = req.query.day;
+  let period = req.query.period;
+  let room = req.query.room;
+  let newdata = { id: id, course: course, day: day, period: period, room: room };
+  classes.push(newdata);
+  // 一覧画面にリダイレクトして追加結果をすぐに確認できるようにする
+  res.redirect("/classes");
+});
+
 app.listen(8080, () => console.log("Example app listening on port 8080!"));
