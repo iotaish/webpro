@@ -1,0 +1,29 @@
+<!Doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>授業一覧</title>
+</head>
+<body>
+  <h2>授業一覧</h2>
+  <p><a href="/public/classes_add.html">＋ 新しい授業を追加する</a></p>
+  <table border="1">
+    <tr>
+      <th>ID</th>
+      <th>科目名</th>
+      <th>曜日</th>
+      <th>時限</th>
+      <th>教室</th>
+    </tr>
+    <% for( let row of data ) { %>
+      <tr>
+        <td><%= row.id %></td>
+        <td><%= row.course %></td>
+        <td><%= row.day %></td>
+        <td><%= row.period %></td>
+        <td><%= row.room %></td>
+      </tr>
+    <% } %>
+  </table>
+</body>
+</html>

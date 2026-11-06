@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>授業を追加する</title>
+</head>
+<body>
+    <h2>授業の登録</h2>
+    <form action="/classes_add">
+        <label for="id">ID</label>
+        <input type="number" name="id" id="id" required><br><br>
+
+        <label for="course">科目名</label>
+        <input type="text" name="course" id="course" required><br><br>
+
+        <label for="day">曜日</label>
+        <input type="text" name="day" id="day" placeholder="例: 金" required><br><br>
+
+        <label for="period">時限</label>
+        <input type="text" name="period" id="period" placeholder="例: 2-3限" required><br><br>
+
+        <label for="room">教室</label>
+        <input type="text" name="room" id="room" placeholder="例: 1102" required><br><br>
+
+        <input type="submit" value="登録">
+    </form>
+    <br>
+    <a href="/classes">授業一覧に戻る</a>
+</body>
+</html>
