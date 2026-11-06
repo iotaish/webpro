@@ -132,7 +132,7 @@ const db = new DatabaseSync(__dirname + "/timetable.db");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS classes (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     course TEXT NOT NULL,
     day TEXT NOT NULL,
     period TEXT NOT NULL,
@@ -140,16 +140,17 @@ db.exec(`
   )
 `);
 
-const classCount = db.prepare("SELECT count(*) as cnt FROM classes").get().cnt;
+const countRow = db.prepare("SELECT count(*) as cnt FROM classes").get();
+const classCount = countRow ? countRow.cnt : 0;
 if (classCount === 0) {
   const insert = db.prepare(
-    "INSERT INTO classes (id, course, day, period, room) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO classes (course, day, period, room) VALUES (?, ?, ?, ?)"
   );
-  insert.run(1, "Webプログラミング", "金", "3-4限", "7104");
-  insert.run(2, "情報ネットワーク", "金", "2-3限", "1231");
-  insert.run(3, "アジャイルワーク１", "水", "5-8限", "7212");
-  insert.run(4, "建築構造材料", "金", "2-3限", "1102");
-  insert.run(5, "AI・プログラミング基礎演習", "金", "7-8限", "8103");
+  insert.run("Webプログラミング", "金", "3-4限", "7104");
+  insert.run("情報ネットワーク", "金", "2-3限", "1231");
+  insert.run("アジャイルワーク１", "水", "5-8限", "7212");
+  insert.run("建築構造材料", "金", "2-3限", "1102");
+  insert.run("AI・プログラミング基礎演習", "金", "7-8限", "8103");
 }
 
 app.get("/classes", (req, res) => {
@@ -158,15 +159,15 @@ app.get("/classes", (req, res) => {
 });
 
 app.post("/classes_add", (req, res) => {
-  let id = Number(req.body.id);
-  let course = req.body.course;
-  let day = req.body.day;
-  let period = req.body.period;
-  let room = req.body.room;
+  const body = req.body || {};
+  let course = body.course;
+  let day = body.day;
+  let period = body.period;
+  let room = body.room;
   const insert = db.prepare(
-    "INSERT OR REPLACE INTO classes (id, course, day, period, room) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO classes (course, day, period, room) VALUES (?, ?, ?, ?)"
   );
-  insert.run(id, course, day, period, room);
+  insert.run(course, day, period, room);
   // 一覧画面にリダイレクトして追加結果をすぐに確認できるようにする
   res.redirect("/classes");
 });
