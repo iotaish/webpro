@@ -3,6 +3,7 @@ const app = express();
 
 app.set('view engine', 'ejs');
 app.use("/public", express.static(__dirname + "/public"));
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/hello1", (req, res) => {
   const message1 = "Hello world";
@@ -156,12 +157,12 @@ app.get("/classes", (req, res) => {
   res.render("classes", { data: classes });
 });
 
-app.get("/classes_add", (req, res) => {
-  let id = Number(req.query.id);
-  let course = req.query.course;
-  let day = req.query.day;
-  let period = req.query.period;
-  let room = req.query.room;
+app.post("/classes_add", (req, res) => {
+  let id = Number(req.body.id);
+  let course = req.body.course;
+  let day = req.body.day;
+  let period = req.body.period;
+  let room = req.body.room;
   const insert = db.prepare(
     "INSERT OR REPLACE INTO classes (id, course, day, period, room) VALUES (?, ?, ?, ?, ?)"
   );
