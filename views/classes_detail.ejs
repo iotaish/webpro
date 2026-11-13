@@ -16,48 +16,52 @@
       <h2 id="detail-heading"><%= data.course %> の詳細</h2>
       <div id="status-message" class="status-message" aria-live="polite"></div>
 
-      <table>
-        <tr><th>項目</th><th>データ</th></tr>
-        <tr><td>ID</td><td id="detail-id"><%= data.id %></td></tr>
-        <tr><td>科目名</td><td id="detail-course"><%= data.course %></td></tr>
-        <tr><td>曜日</td><td id="detail-day"><%= data.day %></td></tr>
-        <tr><td>時限</td><td id="detail-period"><%= data.period %></td></tr>
-        <tr><td>教室</td><td id="detail-room"><%= data.room %></td></tr>
-        <tr><td>担当教員</td><td id="detail-teacher"><%= data.teacher || "未設定" %></td></tr>
-        <tr><td>単位数</td><td id="detail-credits"><%= data.credits %></td></tr>
-        <tr><td>メモ</td><td id="detail-memo"><%= data.memo || "なし" %></td></tr>
-      </table>
-
-      <h3>授業情報の変更</h3>
       <form id="class-edit-form">
-        <div class="form-group">
-          <label for="edit-course">科目名</label>
-          <input type="text" id="edit-course" name="course" value="<%= data.course %>" required>
-        </div>
-        <div class="form-group">
-          <label for="edit-day">曜日</label>
-          <input type="text" id="edit-day" name="day" value="<%= data.day %>" required>
-        </div>
-        <div class="form-group">
-          <label for="edit-period">時限</label>
-          <input type="text" id="edit-period" name="period" value="<%= data.period %>" required>
-        </div>
-        <div class="form-group">
-          <label for="edit-room">教室</label>
-          <input type="text" id="edit-room" name="room" value="<%= data.room %>" required>
-        </div>
-        <div class="form-group">
-          <label for="edit-teacher">担当教員</label>
-          <input type="text" id="edit-teacher" name="teacher" value="<%= data.teacher %>">
-        </div>
-        <div class="form-group">
-          <label for="edit-credits">単位数</label>
-          <input type="number" id="edit-credits" name="credits" min="1" max="10" value="<%= data.credits %>" required>
-        </div>
-        <div class="form-group">
-          <label for="edit-memo">メモ</label>
-          <textarea id="edit-memo" name="memo" rows="3"><%= data.memo %></textarea>
-        </div>
+        <table class="detail-table">
+          <tr>
+            <th>項目</th>
+            <th>データ（直接編集可能）</th>
+          </tr>
+          <tr>
+            <th><label>ID</label></th>
+            <td id="detail-id"><%= data.id %></td>
+          </tr>
+          <tr>
+            <th><label for="edit-course">科目名</label></th>
+            <td><input type="text" id="edit-course" name="course" value="<%= data.course %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-day">曜日</label></th>
+            <td>
+              <select id="edit-day" name="day" required>
+                <% for (let d of days) { %>
+                  <option value="<%= d %>" <%= data.day === d ? "selected" : "" %>><%= d %></option>
+                <% } %>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <th><label for="edit-period">時限</label></th>
+            <td><input type="text" id="edit-period" name="period" value="<%= data.period %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-room">教室</label></th>
+            <td><input type="text" id="edit-room" name="room" value="<%= data.room %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-teacher">担当教員</label></th>
+            <td><input type="text" id="edit-teacher" name="teacher" value="<%= data.teacher %>" placeholder="未設定"></td>
+          </tr>
+          <tr>
+            <th><label for="edit-credits">単位数</label></th>
+            <td><input type="number" id="edit-credits" name="credits" min="1" max="10" value="<%= data.credits %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-memo">メモ</label></th>
+            <td><textarea id="edit-memo" name="memo" rows="3"><%= data.memo %></textarea></td>
+          </tr>
+        </table>
+
         <div class="actions">
           <button type="submit" class="btn btn-primary">変更を保存</button>
           <button type="button" id="delete-btn" class="btn btn-danger">この授業を削除</button>
