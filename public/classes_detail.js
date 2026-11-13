@@ -5,9 +5,24 @@ const editForm = document.querySelector("#class-edit-form");
 const deleteBtn = document.querySelector("#delete-btn");
 const statusEl = document.querySelector("#status-message");
 
+let statusTimerId = null;
+
 function showMessage(text, type) {
+  if (statusTimerId !== null) {
+    clearTimeout(statusTimerId);
+    statusTimerId = null;
+  }
   statusEl.textContent = text;
-  statusEl.className = "status-message " + type;
+  if (type === "success") {
+    statusEl.className = "status-message success toast";
+    statusTimerId = setTimeout(() => {
+      statusEl.className = "status-message";
+      statusEl.textContent = "";
+      statusTimerId = null;
+    }, 1800);
+  } else {
+    statusEl.className = "status-message " + type;
+  }
 }
 
 function syncFormValues(item) {
