@@ -1,4 +1,7 @@
 "use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const { DatabaseSync } = require("node:sqlite");
 const express = require("express");
 const app = express();
 
@@ -151,10 +154,12 @@ app.get("/keiyo2/:number", (req, res) => {
   res.render('keiyo2_detail', {data: detail} );
 });
 
-let nextClassId = 6;
-const classes = [
+const dbPath = process.env.TIMETABLE_DB_PATH || path.join(__dirname, "timetable.db");
+const dbExists = fs.existsSync(dbPath);
+const db = new DatabaseSync(dbPath);
+
+const INITIAL_CLASSES = [
   {
-    id: 1,
     course: "Webプログラミング",
     day: "金",
     period: "3-4限",
@@ -164,48 +169,87 @@ const classes = [
     memo: "Node.js / Express / REST API を用いた Web アプリケーション開発"
   },
   {
-    id: 2,
     course: "情報ネットワーク",
     day: "金",
     period: "2-3限",
     room: "1231",
-    teacher: "未設定",
+    teacher: "",
     credits: 2,
     memo: "TCP/IP やルーティングなどネットワークの基礎を学ぶ"
   },
   {
-    id: 3,
     course: "アジャイルワーク１",
     day: "水",
     period: "5-8限",
     room: "7212",
-    teacher: "未設定",
+    teacher: "",
     credits: 2,
     memo: "チーム開発と反復的なソフトウェア開発プロセスの実践"
   },
   {
-    id: 4,
     course: "建築構造材料",
     day: "金",
     period: "2-3限",
     room: "1102",
-    teacher: "未設定",
+    teacher: "",
     credits: 2,
     memo: "建築に用いる構造材料の性質と設計上の扱い"
   },
   {
-    id: 5,
     course: "AI・プログラミング基礎演習",
     day: "金",
     period: "7-8限",
     room: "8103",
-    teacher: "未設定",
+    teacher: "",
     credits: 2,
     memo: "プログラミングとデータ処理の基礎演習"
   }
 ];
 
+function createClassesTable(database) {
+  database.exec(`
+    CREATE TABLE classes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      course TEXT NOT NULL,
+      day TEXT NOT NULL,
+      period TEXT NOT NULL,
+      room TEXT NOT NULL,
+      teacher TEXT NOT NULL DEFAULT '',
+      credits INTEGER NOT NULL DEFAULT 2,
+      memo TEXT NOT NULL DEFAULT ''
+    )
+  `);
+}
+
+if (!dbExists) {
+  createClassesTable(db);
+  const insert = db.prepare(
+    "INSERT INTO classes (course, day, period, room, teacher, credits, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  );
+  for (const item of INITIAL_CLASSES) {
+    insert.run(item.course, item.day, item.period, item.room, item.teacher, item.credits, item.memo);
+  }
+} else {
+  const existingCols = new Set(
+    db.prepare("PRAGMA table_info(classes)").all().map((col) => col.name)
+  );
+  if (existingCols.size === 0) {
+    createClassesTable(db);
+  } else {
+    if (!existingCols.has("teacher")) {
+      db.exec("ALTER TABLE classes ADD COLUMN teacher TEXT NOT NULL DEFAULT ''");
+    }
+    if (!existingCols.has("credits")) {
+      db.exec("ALTER TABLE classes ADD COLUMN credits INTEGER NOT NULL DEFAULT 2");
+    }
+    if (!existingCols.has("memo")) {
+      db.exec("ALTER TABLE classes ADD COLUMN memo TEXT NOT NULL DEFAULT ''");
+    }
+  }
+}
+
 const ALLOWED_CLASS_DAYS = ["月", "火", "水", "木", "金", "土"];
+const CLASS_COLUMNS = "id, course, day, period, room, teacher, credits, memo";
 
 function parsePositiveIntId(raw) {
   const id = Number(raw);
@@ -246,12 +290,15 @@ function parseClassPayload(body) {
 }
 
 app.get("/classes", (req, res) => {
-  res.render("classes", { data: classes, days: ALLOWED_CLASS_DAYS });
+  const rows = db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes ORDER BY id ASC`).all();
+  res.render("classes", { data: rows, days: ALLOWED_CLASS_DAYS });
 });
 
 app.get("/classes/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
-  const detail = id ? classes.find((item) => item.id === id) : null;
+  const detail = id
+    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
+    : null;
   if (!detail) {
     return res.status(404).render("classes_detail", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS });
   }
@@ -262,25 +309,31 @@ app.get("/api/classes", (req, res) => {
   const dayFilter = typeof req.query.day === "string" ? req.query.day.trim() : "";
   const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
 
-  const filtered = classes.filter((item) => {
-    if (dayFilter && item.day !== dayFilter) {
-      return false;
-    }
-    if (keyword) {
-      const targetText = [item.course, item.room, item.teacher, item.memo].join(" ").toLowerCase();
-      if (!targetText.includes(keyword)) {
-        return false;
-      }
-    }
-    return true;
-  });
+  const conditions = [];
+  const params = [];
+  if (dayFilter) {
+    conditions.push("day = ?");
+    params.push(dayFilter);
+  }
+  if (keyword) {
+    conditions.push("(LOWER(course) LIKE ? OR LOWER(room) LIKE ? OR LOWER(teacher) LIKE ? OR LOWER(memo) LIKE ?)");
+    const likePattern = `%${keyword}%`;
+    params.push(likePattern, likePattern, likePattern, likePattern);
+  }
+
+  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
+  const filtered = db.prepare(
+    `SELECT ${CLASS_COLUMNS} FROM classes${whereClause} ORDER BY id ASC`
+  ).all(...params);
 
   res.json({ data: filtered });
 });
 
 app.get("/api/classes/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
-  const detail = id ? classes.find((item) => item.id === id) : null;
+  const detail = id
+    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
+    : null;
   if (!detail) {
     return res.status(404).json({ error: "指定された授業が見つかりません。" });
   }
@@ -292,17 +345,19 @@ app.post("/api/classes", (req, res) => {
   if (parsed.error) {
     return res.status(400).json({ error: parsed.error });
   }
-  const newClass = {
-    id: nextClassId++,
-    ...parsed.value
-  };
-  classes.push(newClass);
+  const v = parsed.value;
+  const result = db.prepare(
+    "INSERT INTO classes (course, day, period, room, teacher, credits, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo);
+  const newClass = db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(Number(result.lastInsertRowid));
   res.status(201).json({ data: newClass });
 });
 
 app.put("/api/classes/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
-  const target = id ? classes.find((item) => item.id === id) : null;
+  const target = id
+    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
+    : null;
   if (!target) {
     return res.status(404).json({ error: "指定された授業が見つかりません。" });
   }
@@ -310,18 +365,25 @@ app.put("/api/classes/:id", (req, res) => {
   if (parsed.error) {
     return res.status(400).json({ error: parsed.error });
   }
-  Object.assign(target, parsed.value);
-  res.json({ data: target });
+  const v = parsed.value;
+  db.prepare(
+    "UPDATE classes SET course = ?, day = ?, period = ?, room = ?, teacher = ?, credits = ?, memo = ? WHERE id = ?"
+  ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, id);
+  const updated = db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id);
+  res.json({ data: updated });
 });
 
 app.delete("/api/classes/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
-  const index = id ? classes.findIndex((item) => item.id === id) : -1;
-  if (index === -1) {
+  const target = id
+    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
+    : null;
+  if (!target) {
     return res.status(404).json({ error: "指定された授業が見つかりません。" });
   }
-  const [deleted] = classes.splice(index, 1);
-  res.json({ deleted });
+  db.prepare("DELETE FROM classes WHERE id = ?").run(id);
+  res.json({ deleted: target });
 });
 
-app.listen(8080, () => console.log("Example app listening on port 8080!"));
+const PORT = Number(process.env.PORT) || 8080;
+app.listen(PORT, () => console.log(`Example app listening on port ${PORT}!`));
