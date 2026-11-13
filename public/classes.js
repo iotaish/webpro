@@ -9,9 +9,24 @@ const resetFilterBtn = document.querySelector("#reset-filter-btn");
 const summaryCountEl = document.querySelector("#summary-count");
 const summaryCreditsEl = document.querySelector("#summary-credits");
 
+let statusTimerId = null;
+
 function showMessage(text, type) {
+  if (statusTimerId !== null) {
+    clearTimeout(statusTimerId);
+    statusTimerId = null;
+  }
   statusEl.textContent = text;
-  statusEl.className = "status-message " + type;
+  if (type === "success") {
+    statusEl.className = "status-message success toast";
+    statusTimerId = setTimeout(() => {
+      statusEl.className = "status-message";
+      statusEl.textContent = "";
+      statusTimerId = null;
+    }, 1800);
+  } else {
+    statusEl.className = "status-message " + type;
+  }
 }
 
 function updateSummary(items) {
