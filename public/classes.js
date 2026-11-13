@@ -3,20 +3,33 @@
 const tableBody = document.querySelector("#classes-tbody");
 const statusEl = document.querySelector("#status-message");
 const reloadBtn = document.querySelector("#reload-btn");
+const daySelect = document.querySelector("#filter-day");
+const keywordInput = document.querySelector("#filter-keyword");
+const resetFilterBtn = document.querySelector("#reset-filter-btn");
+const summaryCountEl = document.querySelector("#summary-count");
+const summaryCreditsEl = document.querySelector("#summary-credits");
 
 function showMessage(text, type) {
   statusEl.textContent = text;
   statusEl.className = "status-message " + type;
 }
 
+function updateSummary(items) {
+  const list = items || [];
+  const totalCredits = list.reduce((sum, item) => sum + Number(item.credits || 0), 0);
+  summaryCountEl.textContent = String(list.length);
+  summaryCreditsEl.textContent = String(totalCredits);
+}
+
 function renderRows(items) {
   tableBody.textContent = "";
+  updateSummary(items);
 
   if (!items || items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 7;
-    td.textContent = "登録されている授業はありません。";
+    td.textContent = "該当する授業はありません。";
     tr.appendChild(td);
     tableBody.appendChild(tr);
     return;
@@ -77,7 +90,17 @@ function renderRows(items) {
 }
 
 async function fetchClasses() {
-  const res = await fetch("/api/classes");
+  const params = new URLSearchParams();
+  if (daySelect && daySelect.value) {
+    params.set("day", daySelect.value);
+  }
+  if (keywordInput && keywordInput.value.trim()) {
+    params.set("q", keywordInput.value.trim());
+  }
+  const query = params.toString();
+  const url = query ? "/api/classes?" + query : "/api/classes";
+
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error("一覧の取得に失敗しました");
   }
@@ -122,5 +145,25 @@ if (reloadBtn) {
     } catch (err) {
       showMessage(err.message, "error");
     }
+  });
+}
+
+if (daySelect) {
+  daySelect.addEventListener("change", () => {
+    fetchClasses().catch((err) => showMessage(err.message, "error"));
+  });
+}
+
+if (keywordInput) {
+  keywordInput.addEventListener("input", () => {
+    fetchClasses().catch((err) => showMessage(err.message, "error"));
+  });
+}
+
+if (resetFilterBtn) {
+  resetFilterBtn.addEventListener("click", () => {
+    daySelect.value = "";
+    keywordInput.value = "";
+    fetchClasses().catch((err) => showMessage(err.message, "error"));
   });
 }

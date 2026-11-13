@@ -10,17 +10,16 @@ function showMessage(text, type) {
   statusEl.className = "status-message " + type;
 }
 
-function updateDetailDisplay(item) {
+function syncFormValues(item) {
   document.title = item.course + " - 授業詳細";
   document.querySelector("#detail-heading").textContent = item.course + " の詳細";
-  document.querySelector("#detail-id").textContent = String(item.id);
-  document.querySelector("#detail-course").textContent = item.course;
-  document.querySelector("#detail-day").textContent = item.day;
-  document.querySelector("#detail-period").textContent = item.period;
-  document.querySelector("#detail-room").textContent = item.room;
-  document.querySelector("#detail-teacher").textContent = item.teacher || "未設定";
-  document.querySelector("#detail-credits").textContent = String(item.credits);
-  document.querySelector("#detail-memo").textContent = item.memo || "なし";
+  document.querySelector("#edit-course").value = item.course;
+  document.querySelector("#edit-day").value = item.day;
+  document.querySelector("#edit-period").value = item.period;
+  document.querySelector("#edit-room").value = item.room;
+  document.querySelector("#edit-teacher").value = item.teacher || "";
+  document.querySelector("#edit-credits").value = String(item.credits);
+  document.querySelector("#edit-memo").value = item.memo || "";
 }
 
 if (detailRoot && editForm) {
@@ -51,7 +50,7 @@ if (detailRoot && editForm) {
       if (!res.ok) {
         throw new Error(json.error || "更新に失敗しました");
       }
-      updateDetailDisplay(json.data);
+      syncFormValues(json.data);
       showMessage("授業情報を更新しました。", "success");
     } catch (err) {
       showMessage(err.message, "error");
@@ -63,7 +62,7 @@ if (detailRoot && deleteBtn) {
   const classId = detailRoot.dataset.id;
 
   deleteBtn.addEventListener("click", async () => {
-    const courseName = document.querySelector("#detail-course").textContent;
+    const courseName = document.querySelector("#edit-course").value.trim();
     if (!window.confirm(`「${courseName}」を削除しますか？`)) {
       return;
     }
