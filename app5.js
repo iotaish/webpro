@@ -205,6 +205,13 @@ const classes = [
   }
 ];
 
+const ALLOWED_CLASS_DAYS = ["月", "火", "水", "木", "金", "土"];
+
+function parsePositiveIntId(raw) {
+  const id = Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 function parseClassPayload(body) {
   const data = body || {};
   const course = typeof data.course === "string" ? data.course.trim() : "";
@@ -218,8 +225,11 @@ function parseClassPayload(body) {
   if (!course || !day || !period || !room) {
     return { error: "科目名・曜日・時限・教室は必須です。" };
   }
-  if (!Number.isFinite(creditsRaw) || creditsRaw < 1 || creditsRaw > 10) {
-    return { error: "単位数は 1〜10 の数値で指定してください。" };
+  if (!ALLOWED_CLASS_DAYS.includes(day)) {
+    return { error: "曜日は 月〜土 のいずれかを指定してください。" };
+  }
+  if (!Number.isInteger(creditsRaw) || creditsRaw < 1 || creditsRaw > 10) {
+    return { error: "単位数は 1〜10 の整数で指定してください。" };
   }
 
   return {
@@ -229,32 +239,48 @@ function parseClassPayload(body) {
       period,
       room,
       teacher,
-      credits: Math.floor(creditsRaw),
+      credits: creditsRaw,
       memo
     }
   };
 }
 
 app.get("/classes", (req, res) => {
-  res.render("classes", { data: classes });
+  res.render("classes", { data: classes, days: ALLOWED_CLASS_DAYS });
 });
 
 app.get("/classes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const detail = Number.isInteger(id) ? classes.find((item) => item.id === id) : null;
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id ? classes.find((item) => item.id === id) : null;
   if (!detail) {
-    return res.status(404).render("classes_detail", { data: null, id: req.params.id });
+    return res.status(404).render("classes_detail", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS });
   }
-  res.render("classes_detail", { data: detail });
+  res.render("classes_detail", { data: detail, days: ALLOWED_CLASS_DAYS });
 });
 
 app.get("/api/classes", (req, res) => {
-  res.json({ data: classes });
+  const dayFilter = typeof req.query.day === "string" ? req.query.day.trim() : "";
+  const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+
+  const filtered = classes.filter((item) => {
+    if (dayFilter && item.day !== dayFilter) {
+      return false;
+    }
+    if (keyword) {
+      const targetText = [item.course, item.room, item.teacher, item.memo].join(" ").toLowerCase();
+      if (!targetText.includes(keyword)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  res.json({ data: filtered });
 });
 
 app.get("/api/classes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const detail = Number.isInteger(id) ? classes.find((item) => item.id === id) : null;
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id ? classes.find((item) => item.id === id) : null;
   if (!detail) {
     return res.status(404).json({ error: "指定された授業が見つかりません。" });
   }
@@ -275,8 +301,8 @@ app.post("/api/classes", (req, res) => {
 });
 
 app.put("/api/classes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const target = Number.isInteger(id) ? classes.find((item) => item.id === id) : null;
+  const id = parsePositiveIntId(req.params.id);
+  const target = id ? classes.find((item) => item.id === id) : null;
   if (!target) {
     return res.status(404).json({ error: "指定された授業が見つかりません。" });
   }
@@ -289,8 +315,8 @@ app.put("/api/classes/:id", (req, res) => {
 });
 
 app.delete("/api/classes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const index = Number.isInteger(id) ? classes.findIndex((item) => item.id === id) : -1;
+  const id = parsePositiveIntId(req.params.id);
+  const index = id ? classes.findIndex((item) => item.id === id) : -1;
   if (index === -1) {
     return res.status(404).json({ error: "指定された授業が見つかりません。" });
   }
