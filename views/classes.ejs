@@ -1,29 +1,58 @@
-<!Doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
   <title>授業一覧</title>
+  <link rel="stylesheet" href="/public/app.css">
+  <script src="/public/classes.js" defer></script>
 </head>
 <body>
   <h2>授業一覧</h2>
-  <p><a href="/public/classes_add.html">＋ 新しい授業を追加する</a></p>
-  <table border="1">
-    <tr>
-      <th>ID</th>
-      <th>科目名</th>
-      <th>曜日</th>
-      <th>時限</th>
-      <th>教室</th>
-    </tr>
-    <% for( let row of data ) { %>
+  <div class="actions">
+    <a href="/public/classes_add.html" class="btn btn-primary">＋ 新しい授業を追加する</a>
+    <button type="button" id="reload-btn">一覧を再取得</button>
+  </div>
+  <div id="status-message" class="status-message" aria-live="polite"></div>
+
+  <table>
+    <thead>
       <tr>
-        <td><%= row.id %></td>
-        <td><%= row.course %></td>
-        <td><%= row.day %></td>
-        <td><%= row.period %></td>
-        <td><%= row.room %></td>
+        <th>ID</th>
+        <th>科目名</th>
+        <th>曜日</th>
+        <th>時限</th>
+        <th>教室</th>
+        <th>単位</th>
+        <th>操作</th>
       </tr>
-    <% } %>
+    </thead>
+    <tbody id="classes-tbody">
+      <% if (data.length === 0) { %>
+        <tr>
+          <td colspan="7">登録されている授業はありません。</td>
+        </tr>
+      <% } else { %>
+        <% for (let row of data) { %>
+          <tr>
+            <td><%= row.id %></td>
+            <td><a href="/classes/<%= row.id %>"><%= row.course %></a></td>
+            <td><%= row.day %></td>
+            <td><%= row.period %></td>
+            <td><%= row.room %></td>
+            <td><%= row.credits %></td>
+            <td class="actions">
+              <a href="/classes/<%= row.id %>" class="btn">詳細・編集</a>
+              <button
+                type="button"
+                class="btn btn-danger delete-btn"
+                data-id="<%= row.id %>"
+                data-course="<%= row.course %>"
+              >削除</button>
+            </td>
+          </tr>
+        <% } %>
+      <% } %>
+    </tbody>
   </table>
 </body>
 </html>
