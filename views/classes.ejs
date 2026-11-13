@@ -8,10 +8,33 @@
 </head>
 <body>
   <h2>授業一覧</h2>
+
+  <%
+    const totalCredits = data.reduce((sum, item) => sum + Number(item.credits || 0), 0);
+  %>
+  <div id="summary-bar" class="summary-bar">
+    表示件数: <span id="summary-count"><%= data.length %></span> 件 / 合計単位数: <span id="summary-credits"><%= totalCredits %></span> 単位
+  </div>
+
   <div class="actions">
     <a href="/public/classes_add.html" class="btn btn-primary">＋ 新しい授業を追加する</a>
     <button type="button" id="reload-btn">一覧を再取得</button>
   </div>
+
+  <div class="filter-bar">
+    <label for="filter-day">曜日:</label>
+    <select id="filter-day">
+      <option value="">すべて</option>
+      <% for (let d of days) { %>
+        <option value="<%= d %>"><%= d %></option>
+      <% } %>
+    </select>
+
+    <label for="filter-keyword">検索:</label>
+    <input type="text" id="filter-keyword" placeholder="科目名・教室・教員・メモ">
+    <button type="button" id="reset-filter-btn">条件クリア</button>
+  </div>
+
   <div id="status-message" class="status-message" aria-live="polite"></div>
 
   <table>
