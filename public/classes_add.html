@@ -1,27 +1,55 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>授業を追加する</title>
+  <meta charset="UTF-8">
+  <title>授業を追加する</title>
+  <link rel="stylesheet" href="/public/app.css">
+  <script src="/public/classes_add.js" defer></script>
 </head>
 <body>
-    <h2>授業の登録</h2>
-    <form action="/classes_add" method="POST">
-        <label for="course">科目名</label>
-        <input type="text" name="course" id="course" required><br><br>
+  <h2>授業の登録</h2>
+  <div id="status-message" class="status-message" aria-live="polite"></div>
 
-        <label for="day">曜日</label>
-        <input type="text" name="day" id="day" placeholder="例: 金" required><br><br>
-
-        <label for="period">時限</label>
-        <input type="text" name="period" id="period" placeholder="例: 2-3限" required><br><br>
-
-        <label for="room">教室</label>
-        <input type="text" name="room" id="room" placeholder="例: 1102" required><br><br>
-
-        <input type="submit" value="登録">
-    </form>
-    <br>
-    <a href="/classes">授業一覧に戻る</a>
+  <form id="class-add-form">
+    <div class="form-group">
+      <label for="course">科目名</label>
+      <input type="text" name="course" id="course" required>
+    </div>
+    <div class="form-group">
+      <label for="day">曜日</label>
+      <select name="day" id="day" required>
+        <option value="月">月</option>
+        <option value="火">火</option>
+        <option value="水">水</option>
+        <option value="木">木</option>
+        <option value="金" selected>金</option>
+        <option value="土">土</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="period">時限</label>
+      <input type="text" name="period" id="period" placeholder="例: 2-3限" required>
+    </div>
+    <div class="form-group">
+      <label for="room">教室</label>
+      <input type="text" name="room" id="room" placeholder="例: 1102" required>
+    </div>
+    <div class="form-group">
+      <label for="teacher">担当教員</label>
+      <input type="text" name="teacher" id="teacher" placeholder="例: 須田 博之">
+    </div>
+    <div class="form-group">
+      <label for="credits">単位数</label>
+      <input type="number" name="credits" id="credits" min="1" max="10" value="2" required>
+    </div>
+    <div class="form-group">
+      <label for="memo">メモ</label>
+      <textarea name="memo" id="memo" rows="3" placeholder="講義の概要やメモ"></textarea>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn btn-primary">登録</button>
+      <a href="/classes" class="btn">授業一覧に戻る</a>
+    </div>
+  </form>
 </body>
 </html>
