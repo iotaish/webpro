@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title><%= data ? data.course + " - 授業詳細" : "授業が見つかりません" %></title>
+  <link rel="stylesheet" href="/public/app.css">
+  <script src="/public/classes_detail.js" defer></script>
+</head>
+<body>
+  <% if (!data) { %>
+    <h2>授業が見つかりません</h2>
+    <p>指定された ID（<%= id %>）の授業データは存在しません。</p>
+    <a href="/classes" class="btn">授業一覧に戻る</a>
+  <% } else { %>
+    <div id="class-detail-root" data-id="<%= data.id %>">
+      <h2 id="detail-heading"><%= data.course %> の詳細</h2>
+      <div id="status-message" class="status-message" aria-live="polite"></div>
+
+      <form id="class-edit-form">
+        <table class="detail-table">
+          <tr>
+            <th>項目</th>
+            <th>データ（直接編集可能）</th>
+          </tr>
+          <tr>
+            <th><label>ID</label></th>
+            <td id="detail-id"><%= data.id %></td>
+          </tr>
+          <tr>
+            <th><label for="edit-course">科目名</label></th>
+            <td><input type="text" id="edit-course" name="course" value="<%= data.course %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-day">曜日</label></th>
+            <td>
+              <select id="edit-day" name="day" required>
+                <% for (let d of days) { %>
+                  <option value="<%= d %>" <%= data.day === d ? "selected" : "" %>><%= d %></option>
+                <% } %>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <th><label for="edit-period">時限</label></th>
+            <td><input type="text" id="edit-period" name="period" value="<%= data.period %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-room">教室</label></th>
+            <td><input type="text" id="edit-room" name="room" value="<%= data.room %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-teacher">担当教員</label></th>
+            <td><input type="text" id="edit-teacher" name="teacher" value="<%= data.teacher %>" placeholder="未設定"></td>
+          </tr>
+          <tr>
+            <th><label for="edit-credits">単位数</label></th>
+            <td><input type="number" id="edit-credits" name="credits" min="1" max="10" value="<%= data.credits %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-memo">メモ</label></th>
+            <td><textarea id="edit-memo" name="memo" rows="3"><%= data.memo %></textarea></td>
+          </tr>
+        </table>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">変更を保存</button>
+          <button type="button" id="delete-btn" class="btn btn-danger">この授業を削除</button>
+          <a href="/classes" class="btn">授業一覧に戻る</a>
+        </div>
+      </form>
+    </div>
+  <% } %>
+</body>
+</html>
