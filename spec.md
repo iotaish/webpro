@@ -118,10 +118,13 @@
 
 ## 2.3. データ管理と永続化に関する仕様
 
-- **基本方針**: 初期実装ではサーバプロセス上の変数（メモリ内配列）でデータを管理する。
+- **変更の経緯**: 初期実装ではメモリ内配列で管理していたが、サーバ再起動時に登録・編集・削除内容が失われるため、ファイルベースの永続化（SQLite）へ仕様変更した。
 - **授業・時間割管理（`/classes`）**:
-  - `app5.js` 内の配列 `classes` と採番カウンタ `nextClassId`（初期値 `6`）で管理する。
-  - サーバ起動時に 5 件の初期授業データ（`id: 1`〜`5`）を保持する。メモリ管理のため、サーバ再起動時は初期状態に戻る。
+  - `node:sqlite`（`DatabaseSync`）を用いて `timetable.db`（環境変数 `TIMETABLE_DB_PATH` でパス変更可）の `classes` テーブルに永続化する。
+  - **既存 DB 非初期化ルール**:
+    - 起動時に `.db` ファイルが**存在しない場合のみ**、`classes` テーブルの作成と初期 5 件の投入を行う。
+    - すでに `.db` ファイルが存在する場合は、レコード件数が 0 件（全件削除済み）であっても再初期化や初期データの再投入を行わず、既存データをそのまま読み込む。
+    - 旧スキーマ（`teacher` / `credits` / `memo` 列なし）の既存 DB を読み込んだ場合は、`ALTER TABLE ... ADD COLUMN` により安全に列を拡張する。
 
 （第2・第3アプリケーションは今後追記）
 
@@ -236,18 +239,18 @@ sequenceDiagram
 
 ### 3.4.1. 授業・時間割管理（`/classes`, `/api/classes`）
 
-#### データモデル（`ClassItem`）
+#### データモデル（`ClassItem` / `classes` テーブル）
 
-| フィールド | 型 | 説明 |
+| フィールド | 型（SQLite 型） | 説明 |
 | --- | --- | --- |
-| `id` | `number` | 正の整数の一意識別子（自動採番） |
-| `course` | `string` | 科目名（必須） |
-| `day` | `string` | 曜日（必須、`月` / `火` / `水` / `木` / `金` / `土`） |
-| `period` | `string` | 時限（必須） |
-| `room` | `string` | 教室（必須） |
-| `teacher` | `string` | 担当教員（任意、既定値 `""`） |
-| `credits` | `number` | 単位数（`1`〜`10` の整数、未指定時 `2`） |
-| `memo` | `string` | メモ（任意、既定値 `""`） |
+| `id` | `number`（`INTEGER PRIMARY KEY AUTOINCREMENT`） | 正の整数の一意識別子（自動採番） |
+| `course` | `string`（`TEXT NOT NULL`） | 科目名（必須） |
+| `day` | `string`（`TEXT NOT NULL`） | 曜日（必須、`月` / `火` / `水` / `木` / `金` / `土`） |
+| `period` | `string`（`TEXT NOT NULL`） | 時限（必須） |
+| `room` | `string`（`TEXT NOT NULL`） | 教室（必須） |
+| `teacher` | `string`（`TEXT NOT NULL DEFAULT ''`） | 担当教員（任意、既定値 `""`） |
+| `credits` | `number`（`INTEGER NOT NULL DEFAULT 2`） | 単位数（`1`〜`10` の整数、未指定時 `2`） |
+| `memo` | `string`（`TEXT NOT NULL DEFAULT ''`） | メモ（任意、既定値 `""`） |
 
 #### 画面ルート・REST API エンドポイント
 
@@ -276,3 +279,4 @@ sequenceDiagram
 | HTTP メソッド（`POST` / `PUT` / `DELETE`） | 資源の作成（`POST`）・全体または項目更新（`PUT`）・削除（`DELETE`）を意味づける HTTP メソッド | 授業前半では `GET` 中心（一部 `POST` のみ）だったが、REST API の設計原則に沿って操作種別を URL とメソッドで明確に分離するため採用。 |
 | `express.urlencoded()` / `express.json()` | リクエストボディを解析して `req.body` に格納する Express 標準ミドルウェア | フォーム送信（URL エンコード形式）と REST API 通信（JSON 形式）の双方をサーバ側で安全かつ簡潔に受け取るため採用。 |
 | ブラウザ `fetch` API | ブラウザから非同期で HTTP リクエストを送受信する Web 標準 API | 画面全体をリロードせずに一覧の再取得・絞り込み・直接編集・削除を即座に反映し、操作性の高い UI を実現するため採用。 |
+| `node:sqlite`（`DatabaseSync`） | Node.js 標準組み込みの同期型 SQLite データベースモジュール | 追加の外部 npm パッケージやネイティブビルドを不要にしつつ、Node.js 標準機能だけでデータをファイル永続化（`.db`）できるため採用。 |
