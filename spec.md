@@ -9,7 +9,7 @@
 | No. | アプリケーション名 | 画面URL | REST API ベースURL | 概要 |
 | --- | --- | --- | --- | --- |
 | 1 | 授業・時間割管理 | `/classes` | `/api/classes` | 履修授業（科目名・曜日・時限・教室・担当教員・単位数・メモ）の一覧・検索・CRUD 管理 |
-| 2 | 未定 | 未定 | 未定 | 未定 |
+| 2 | 積みゲー・積読リスト | `/backlog` | `/api/backlog` | 積んでいるゲーム・書籍（種別・媒体・積み年数・想定所要時間・ステータス・メモ）の一覧・絞り込み・CRUD 管理 |
 | 3 | 未定 | 未定 | 未定 | 未定 |
 
 ---
@@ -32,7 +32,7 @@
 
 - 各アプリの実ルート例:
   - アプリ1（授業・時間割管理）: `/classes`, `/public/classes_add.html`, `/classes/:id`
-  - アプリ2: 未定
+  - アプリ2（積みゲー・積読リスト）: `/backlog`, `/public/backlog_add.html`, `/backlog/:id`
   - アプリ3: 未定
 
 ## 1.3. 基本操作手順（全アプリ共通）
@@ -81,9 +81,20 @@
 | 単位数 | `credits` | 任意（実質整数） | 数値 | `1`〜`10` の整数（未指定・空文字時は初期値 `2`） |
 | メモ | `memo` | 任意 | テキストエリア | 講義概要・自由記述 |
 
-### 1.4.2. 第2アプリケーション（未定）
+### 1.4.2. 積みゲー・積読リスト（`/backlog`）
 
-（今後策定）
+- **サマリ表示**: 表示中の件数および未消化アイテム（ステータスが `未着手` または `進行中`）の想定所要時間合計（時間）を算出して表示する。
+- **絞り込み条件**: 種別セレクト（`すべて` / `ゲーム` / `書籍`）、ステータスセレクト（`すべて` / `未着手` / `進行中` / `完了` / `断念`）、およびキーワード検索（タイトル・媒体/プラットフォーム・メモの部分一致）。
+
+| 項目名 | フィールド名 | 必須 | 型 / 入力形式 | 制限・初期値 |
+| --- | --- | --- | --- | --- |
+| タイトル | `title` | 必須 | テキスト | 前後空白除去後に空文字不可 |
+| 種別 | `type` | 必須 | セレクト | `ゲーム` / `書籍` のみ許可（新規フォーム初期値: `ゲーム`） |
+| 媒体/プラットフォーム | `platform` | 必須 | テキスト | 前後空白除去後に空文字不可（例: `Switch` / `PC(Steam)` / `技術書`） |
+| 積み年数 | `yearsStacked` | 任意（実質整数） | 数値 | `0`〜`50` の整数（未指定・空文字時は初期値 `0`） |
+| 想定所要時間（時間） | `estimatedHours` | 任意（実質整数） | 数値 | `1`〜`1000` の整数（未指定・空文字時は初期値 `10`） |
+| ステータス | `status` | 任意 | セレクト | `未着手` / `進行中` / `完了` / `断念` のみ許可（未指定時は初期値 `未着手`） |
+| メモ | `memo` | 任意 | テキストエリア | 購入理由やプレイ/読書メモ |
 
 ### 1.4.3. 第3アプリケーション（未定）
 
@@ -126,7 +137,11 @@
     - すでに `.db` ファイルが存在する場合は、レコード件数が 0 件（全件削除済み）であっても再初期化や初期データの再投入を行わず、既存データをそのまま読み込む。
     - 旧スキーマ（`teacher` / `credits` / `memo` 列なし）の既存 DB を読み込んだ場合は、`ALTER TABLE ... ADD COLUMN` により安全に列を拡張する。
 
-（第2・第3アプリケーションは今後追記）
+- **積みゲー・積読リスト（`/backlog`）**:
+  - アプリ 1 での永続化方針を踏まえ、当初から `node:sqlite`（`DatabaseSync`）を用いて `backlog.db`（環境変数 `BACKLOG_DB_PATH` でパス変更可）の `backlog` テーブルに永続化する。
+  - 授業・時間割管理と同様の**既存 DB 非初期化ルール**を適用し、`.db` 未存在時のみテーブル作成および初期サンプル 5 件の投入を行う。
+
+（第3アプリケーションは今後追記）
 
 ## 2.4. 運用監視とトラブルシューティング
 
@@ -168,7 +183,13 @@
   - `public/classes_detail.js`: 詳細直接編集（`PUT`）および削除（`DELETE`）連携
   - `views/classes.ejs` / `views/classes_detail.ejs`: 一覧・詳細（`404` 表示含む）テンプレート
 
-（第2・第3アプリで追加したファイル一覧は対象アプリの仕様策定時に追記）
+- **積みゲー・積読リスト（`/backlog`）関連ファイル**:
+  - `public/backlog.js`: 一覧画面（種別/ステータス/キーワード絞り込み・再取得・削除・サマリ集計）
+  - `public/backlog_add.html` / `public/backlog_add.js`: 新規登録フォームおよび `POST /api/backlog` 連携
+  - `public/backlog_detail.js`: 詳細直接編集（`PUT`）および削除（`DELETE`）連携
+  - `views/backlog.ejs` / `views/backlog_detail.ejs`: 一覧・詳細（`404` 表示含む）テンプレート
+
+（第3アプリで追加したファイル一覧は対象アプリの仕様策定時に追記）
 
 ## 3.2. コーディング規約・設計方針
 
@@ -264,9 +285,32 @@ sequenceDiagram
 | `PUT /api/classes/:id` | 授業情報更新 | パス `id`、JSON（同上） | `200` `{ data: ClassItem }` / `400`, `404` `{ error }` |
 | `DELETE /api/classes/:id` | 授業削除 | パス `id` | `200` `{ deleted: ClassItem }` / `404` `{ error }` |
 
-### 3.4.2. 第2アプリケーション（未定）
+### 3.4.2. 積みゲー・積読リスト（`/backlog`, `/api/backlog`）
 
-（今後策定）
+#### データモデル（`BacklogItem` / `backlog` テーブル）
+
+| フィールド | 型（SQLite 型） | 説明 |
+| --- | --- | --- |
+| `id` | `number`（`INTEGER PRIMARY KEY AUTOINCREMENT`） | 正の整数の一意識別子（自動採番） |
+| `title` | `string`（`TEXT NOT NULL`） | タイトル（必須） |
+| `type` | `string`（`TEXT NOT NULL`） | 種別（必須、`ゲーム` / `書籍`） |
+| `platform` | `string`（`TEXT NOT NULL`） | 媒体・プラットフォーム（必須） |
+| `yearsStacked` | `number`（`INTEGER NOT NULL DEFAULT 0`） | 積み年数（`0`〜`50` の整数、未指定時 `0`） |
+| `estimatedHours` | `number`（`INTEGER NOT NULL DEFAULT 10`） | 想定所要時間（`1`〜`1000` の整数、未指定時 `10`） |
+| `status` | `string`（`TEXT NOT NULL DEFAULT '未着手'`） | ステータス（`未着手` / `進行中` / `完了` / `断念`） |
+| `memo` | `string`（`TEXT NOT NULL DEFAULT ''`） | メモ（任意、既定値 `""`） |
+
+#### 画面ルート・REST API エンドポイント
+
+| メソッド・パス | 概要 | クエリ / リクエストボディ | レスポンス |
+| --- | --- | --- | --- |
+| `GET /backlog` | 一覧画面初期表示 | — | HTML（`views/backlog.ejs`） |
+| `GET /backlog/:id` | 詳細・直接編集画面 | パス `id`（正の整数） | HTML（`views/backlog_detail.ejs` / 不在時 `404`） |
+| `GET /api/backlog` | 一覧取得・絞り込み | `?type=種別&status=状態&q=キーワード`（`title`/`platform`/`memo` 部分一致） | `200` `{ data: BacklogItem[] }` |
+| `GET /api/backlog/:id` | 詳細取得 | パス `id` | `200` `{ data: BacklogItem }` / `404` `{ error }` |
+| `POST /api/backlog` | 新規アイテム登録 | JSON（`title`, `type`, `platform`, `yearsStacked?`, `estimatedHours?`, `status?`, `memo?`） | `201` `{ data: BacklogItem }` / `400` `{ error }` |
+| `PUT /api/backlog/:id` | アイテム更新 | パス `id`、JSON（同上） | `200` `{ data: BacklogItem }` / `400`, `404` `{ error }` |
+| `DELETE /api/backlog/:id` | アイテム削除 | パス `id` | `200` `{ deleted: BacklogItem }` / `404` `{ error }` |
 
 ### 3.4.3. 第3アプリケーション（未定）
 
