@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>アイテムを追加する</title>
+  <link rel="stylesheet" href="/public/app.css">
+  <script src="/public/backlog_add.js" defer></script>
+</head>
+<body>
+  <h2>積みゲー・積読の登録</h2>
+  <div id="status-message" class="status-message" aria-live="polite"></div>
+
+  <form id="backlog-add-form">
+    <div class="form-group">
+      <label for="title">タイトル</label>
+      <input type="text" name="title" id="title" required>
+    </div>
+    <div class="form-group">
+      <label for="type">種別</label>
+      <select name="type" id="type" required>
+        <option value="ゲーム" selected>ゲーム</option>
+        <option value="書籍">書籍</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="platform">媒体・プラットフォーム</label>
+      <input type="text" name="platform" id="platform" placeholder="例: Switch / PC(Steam) / 技術書" required>
+    </div>
+    <div class="form-group">
+      <label for="yearsStacked">積み年数（年）</label>
+      <input type="number" name="yearsStacked" id="yearsStacked" min="0" max="50" value="0" required>
+    </div>
+    <div class="form-group">
+      <label for="estimatedHours">想定所要時間（時間）</label>
+      <input type="number" name="estimatedHours" id="estimatedHours" min="1" max="1000" value="10" required>
+    </div>
+    <div class="form-group">
+      <label for="status">ステータス</label>
+      <select name="status" id="status" required>
+        <option value="未着手" selected>未着手</option>
+        <option value="進行中">進行中</option>
+        <option value="完了">完了</option>
+        <option value="断念">断念</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="memo">メモ</label>
+      <textarea name="memo" id="memo" rows="3" placeholder="購入理由やプレイ/読書メモ"></textarea>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn btn-primary">登録</button>
+      <a href="/backlog" class="btn">一覧に戻る</a>
+    </div>
+  </form>
+</body>
+</html>
