@@ -385,5 +385,262 @@ app.delete("/api/classes/:id", (req, res) => {
   res.json({ deleted: target });
 });
 
+const backlogDbPath = process.env.BACKLOG_DB_PATH || path.join(__dirname, "backlog.db");
+const backlogDbExists = fs.existsSync(backlogDbPath);
+const backlogDb = new DatabaseSync(backlogDbPath);
+
+const INITIAL_BACKLOG = [
+  {
+    title: "ゼルダの伝説 ティアーズ オブ ザ キングダム",
+    type: "ゲーム",
+    platform: "Switch",
+    yearsStacked: 1,
+    estimatedHours: 80,
+    status: "進行中",
+    memo: "メインストーリー中盤、空島の探索を進行中"
+  },
+  {
+    title: "リーダブルコード",
+    type: "書籍",
+    platform: "技術書",
+    yearsStacked: 2,
+    estimatedHours: 8,
+    status: "未着手",
+    memo: "変数名・関数分割の設計指針を整理するために購入"
+  },
+  {
+    title: "ELDEN RING",
+    type: "ゲーム",
+    platform: "PC(Steam)",
+    yearsStacked: 2,
+    estimatedHours: 100,
+    status: "未着手",
+    memo: "セール時に購入しまとまった休みに遊ぶ予定"
+  },
+  {
+    title: "Webを支える技術",
+    type: "書籍",
+    platform: "技術書",
+    yearsStacked: 1,
+    estimatedHours: 12,
+    status: "完了",
+    memo: "HTTPメソッドとREST設計の基礎理解のため読了"
+  },
+  {
+    title: "積読中のSF長編小説",
+    type: "書籍",
+    platform: "文庫",
+    yearsStacked: 3,
+    estimatedHours: 15,
+    status: "断念",
+    memo: "序盤で止まったまま別作品へ移行"
+  }
+];
+
+function createBacklogTable(database) {
+  database.exec(`
+    CREATE TABLE backlog (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      type TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      yearsStacked INTEGER NOT NULL DEFAULT 0,
+      estimatedHours INTEGER NOT NULL DEFAULT 10,
+      status TEXT NOT NULL DEFAULT '未着手',
+      memo TEXT NOT NULL DEFAULT ''
+    )
+  `);
+}
+
+if (!backlogDbExists) {
+  createBacklogTable(backlogDb);
+  const insertBacklog = backlogDb.prepare(
+    "INSERT INTO backlog (title, type, platform, yearsStacked, estimatedHours, status, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  );
+  for (const item of INITIAL_BACKLOG) {
+    insertBacklog.run(
+      item.title,
+      item.type,
+      item.platform,
+      item.yearsStacked,
+      item.estimatedHours,
+      item.status,
+      item.memo
+    );
+  }
+} else {
+  const existingCols = backlogDb.prepare("PRAGMA table_info(backlog)").all();
+  if (existingCols.length === 0) {
+    createBacklogTable(backlogDb);
+  }
+}
+
+const ALLOWED_BACKLOG_TYPES = ["ゲーム", "書籍"];
+const ALLOWED_BACKLOG_STATUSES = ["未着手", "進行中", "完了", "断念"];
+const BACKLOG_COLUMNS = "id, title, type, platform, yearsStacked, estimatedHours, status, memo";
+
+function parseOptionalInt(raw, fallback) {
+  if (raw === undefined || raw === null || raw === "") {
+    return fallback;
+  }
+  if (typeof raw === "boolean") {
+    return NaN;
+  }
+  return Number(raw);
+}
+
+function parseBacklogPayload(body) {
+  const data = body || {};
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  const type = typeof data.type === "string" ? data.type.trim() : "";
+  const platform = typeof data.platform === "string" ? data.platform.trim() : "";
+  const status = typeof data.status === "string" && data.status.trim() ? data.status.trim() : "未着手";
+  const memo = typeof data.memo === "string" ? data.memo.trim() : "";
+  const yearsStacked = parseOptionalInt(data.yearsStacked, 0);
+  const estimatedHours = parseOptionalInt(data.estimatedHours, 10);
+
+  if (!title || !type || !platform) {
+    return { error: "タイトル・種別・媒体/プラットフォームは必須です。" };
+  }
+  if (!ALLOWED_BACKLOG_TYPES.includes(type)) {
+    return { error: "種別は ゲーム / 書籍 のいずれかを指定してください。" };
+  }
+  if (!ALLOWED_BACKLOG_STATUSES.includes(status)) {
+    return { error: "ステータスは 未着手 / 進行中 / 完了 / 断念 のいずれかを指定してください。" };
+  }
+  if (!Number.isInteger(yearsStacked) || yearsStacked < 0 || yearsStacked > 50) {
+    return { error: "積み年数は 0〜50 の整数で指定してください。" };
+  }
+  if (!Number.isInteger(estimatedHours) || estimatedHours < 1 || estimatedHours > 1000) {
+    return { error: "想定所要時間は 1〜1000 の整数で指定してください。" };
+  }
+
+  return {
+    value: {
+      title,
+      type,
+      platform,
+      yearsStacked,
+      estimatedHours,
+      status,
+      memo
+    }
+  };
+}
+
+app.get("/backlog", (req, res) => {
+  const rows = backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog ORDER BY id ASC`).all();
+  res.render("backlog", {
+    data: rows,
+    types: ALLOWED_BACKLOG_TYPES,
+    statuses: ALLOWED_BACKLOG_STATUSES
+  });
+});
+
+app.get("/backlog/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id
+    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
+    : null;
+  if (!detail) {
+    return res.status(404).render("backlog_detail", {
+      data: null,
+      id: req.params.id,
+      types: ALLOWED_BACKLOG_TYPES,
+      statuses: ALLOWED_BACKLOG_STATUSES
+    });
+  }
+  res.render("backlog_detail", {
+    data: detail,
+    types: ALLOWED_BACKLOG_TYPES,
+    statuses: ALLOWED_BACKLOG_STATUSES
+  });
+});
+
+app.get("/api/backlog", (req, res) => {
+  const typeFilter = typeof req.query.type === "string" ? req.query.type.trim() : "";
+  const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+
+  const conditions = [];
+  const params = [];
+  if (typeFilter) {
+    conditions.push("type = ?");
+    params.push(typeFilter);
+  }
+  if (statusFilter) {
+    conditions.push("status = ?");
+    params.push(statusFilter);
+  }
+  if (keyword) {
+    conditions.push("(LOWER(title) LIKE ? OR LOWER(platform) LIKE ? OR LOWER(memo) LIKE ?)");
+    const likePattern = `%${keyword}%`;
+    params.push(likePattern, likePattern, likePattern);
+  }
+
+  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
+  const filtered = backlogDb.prepare(
+    `SELECT ${BACKLOG_COLUMNS} FROM backlog${whereClause} ORDER BY id ASC`
+  ).all(...params);
+
+  res.json({ data: filtered });
+});
+
+app.get("/api/backlog/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id
+    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
+    : null;
+  if (!detail) {
+    return res.status(404).json({ error: "指定された積みアイテムが見つかりません。" });
+  }
+  res.json({ data: detail });
+});
+
+app.post("/api/backlog", (req, res) => {
+  const parsed = parseBacklogPayload(req.body);
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+  const v = parsed.value;
+  const result = backlogDb.prepare(
+    "INSERT INTO backlog (title, type, platform, yearsStacked, estimatedHours, status, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo);
+  const created = backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(Number(result.lastInsertRowid));
+  res.status(201).json({ data: created });
+});
+
+app.put("/api/backlog/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const target = id
+    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
+    : null;
+  if (!target) {
+    return res.status(404).json({ error: "指定された積みアイテムが見つかりません。" });
+  }
+  const parsed = parseBacklogPayload(req.body);
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+  const v = parsed.value;
+  backlogDb.prepare(
+    "UPDATE backlog SET title = ?, type = ?, platform = ?, yearsStacked = ?, estimatedHours = ?, status = ?, memo = ? WHERE id = ?"
+  ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, id);
+  const updated = backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id);
+  res.json({ data: updated });
+});
+
+app.delete("/api/backlog/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const target = id
+    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
+    : null;
+  if (!target) {
+    return res.status(404).json({ error: "指定された積みアイテムが見つかりません。" });
+  }
+  backlogDb.prepare("DELETE FROM backlog WHERE id = ?").run(id);
+  res.json({ deleted: target });
+});
+
 const PORT = Number(process.env.PORT) || 8080;
 app.listen(PORT, () => console.log(`Example app listening on port ${PORT}!`));

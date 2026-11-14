@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title><%= data ? data.title + " - 詳細" : "アイテムが見つかりません" %></title>
+  <link rel="stylesheet" href="/public/app.css">
+  <script src="/public/backlog_detail.js" defer></script>
+</head>
+<body>
+  <% if (!data) { %>
+    <h2>アイテムが見つかりません</h2>
+    <p>指定された ID（<%= id %>）のデータは存在しません。</p>
+    <a href="/backlog" class="btn">一覧に戻る</a>
+  <% } else { %>
+    <div id="backlog-detail-root" data-id="<%= data.id %>">
+      <h2 id="detail-heading"><%= data.title %> の詳細</h2>
+      <div id="status-message" class="status-message" aria-live="polite"></div>
+
+      <form id="backlog-edit-form">
+        <table class="detail-table">
+          <tr>
+            <th>項目</th>
+            <th>データ（直接編集可能）</th>
+          </tr>
+          <tr>
+            <th><label>ID</label></th>
+            <td id="detail-id"><%= data.id %></td>
+          </tr>
+          <tr>
+            <th><label for="edit-title">タイトル</label></th>
+            <td><input type="text" id="edit-title" name="title" value="<%= data.title %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-type">種別</label></th>
+            <td>
+              <select id="edit-type" name="type" required>
+                <% for (let t of types) { %>
+                  <option value="<%= t %>" <%= data.type === t ? "selected" : "" %>><%= t %></option>
+                <% } %>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <th><label for="edit-platform">媒体・プラットフォーム</label></th>
+            <td><input type="text" id="edit-platform" name="platform" value="<%= data.platform %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-years">積み年数（年）</label></th>
+            <td><input type="number" id="edit-years" name="yearsStacked" min="0" max="50" value="<%= data.yearsStacked %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-hours">想定所要時間（時間）</label></th>
+            <td><input type="number" id="edit-hours" name="estimatedHours" min="1" max="1000" value="<%= data.estimatedHours %>" required></td>
+          </tr>
+          <tr>
+            <th><label for="edit-status">ステータス</label></th>
+            <td>
+              <select id="edit-status" name="status" required>
+                <% for (let s of statuses) { %>
+                  <option value="<%= s %>" <%= data.status === s ? "selected" : "" %>><%= s %></option>
+                <% } %>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <th><label for="edit-memo">メモ</label></th>
+            <td><textarea id="edit-memo" name="memo" rows="3"><%= data.memo %></textarea></td>
+          </tr>
+        </table>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">変更を保存</button>
+          <button type="button" id="delete-btn" class="btn btn-danger">このアイテムを削除</button>
+          <a href="/backlog" class="btn">一覧に戻る</a>
+        </div>
+      </form>
+    </div>
+  <% } %>
+</body>
+</html>
