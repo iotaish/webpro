@@ -4,13 +4,11 @@
   <meta charset="UTF-8">
   <title>授業を追加する</title>
   <link rel="stylesheet" href="/public/app.css">
-  <script src="/public/classes_add.js" defer></script>
 </head>
 <body>
   <h2>授業の登録</h2>
-  <div id="status-message" class="status-message" aria-live="polite"></div>
 
-  <form id="class-add-form">
+  <form action="/classes" method="POST">
     <div class="form-group">
       <label for="course">科目名</label>
       <input type="text" name="course" id="course" required>

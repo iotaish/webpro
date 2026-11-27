@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title><%= data ? data.course + " - 削除確認" : "授業が見つかりません" %></title>
+  <link rel="stylesheet" href="/public/app.css">
+</head>
+<body>
+  <% if (!data) { %>
+    <h2>授業が見つかりません</h2>
+    <p>指定された ID（<%= id %>）の授業データは存在しません。</p>
+    <a href="/classes" class="btn">授業一覧に戻る</a>
+  <% } else { %>
+    <h2>授業の削除確認</h2>
+    <p>以下の授業を削除しますか？</p>
+
+    <table class="detail-table">
+      <tr>
+        <th>ID</th>
+        <td><%= data.id %></td>
+      </tr>
+      <tr>
+        <th>科目名</th>
+        <td><%= data.course %></td>
+      </tr>
+      <tr>
+        <th>曜日・時限</th>
+        <td><%= data.day %> <%= data.period %></td>
+      </tr>
+      <tr>
+        <th>教室</th>
+        <td><%= data.room %></td>
+      </tr>
+    </table>
+
+    <form action="/classes/delete/<%= data.id %>" method="POST" class="actions">
+      <button type="submit" class="btn btn-danger">削除する</button>
+      <a href="/classes/<%= data.id %>" class="btn">キャンセル</a>
+    </form>
+  <% } %>
+</body>
+</html>
