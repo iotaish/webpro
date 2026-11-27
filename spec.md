@@ -161,96 +161,15 @@
 3. **サーバ側バリデーションと統一 HTTP ステータス**:
    - 入力値の検証をサーバ側で一元化し、必須項目欠落・型不正・範囲外は `400 Bad Request`、対象 ID 不在は `404 Not Found` を返す。
 
-### 3.2. 共通画面遷移図と通信シーケンス
+### 3.2. システム1：授業・時間割管理（`/classes`）
 
-#### 3.2.1. 共通画面遷移図
-
-画面（矩形）と処理エンドポイント（角丸）を分離し、`GET` 遷移・`POST` 送信・`302` リダイレクト（PRG パターン）・`400`/`404` 異常系を明示した遷移図を以下に示す。
-
-```mermaid
-flowchart LR
-  list["一覧・絞り込み画面<br/>GET /:resource"]
-  detail["詳細画面<br/>GET /:resource/:id"]
-  create["新規登録画面<br/>GET /:resource/create<br/>→ /:resource_add.html"]
-  create_proc(["新規登録処理<br/>POST /:resource"])
-  edit["編集画面<br/>GET /:resource/edit/:id"]
-  update_proc(["更新処理<br/>POST /:resource/update/:id"])
-  del_confirm["削除確認画面<br/>GET /:resource/delete/:id"]
-  del_proc(["削除処理<br/>POST /:resource/delete/:id"])
-  err400["400 エラー応答"]
-  notfound["404 画面<br/>（存在しない ID）"]
-
-  list -->|"GET 絞り込み / 条件クリア"| list
-  list -->|"GET 追加"| create
-  create -->|"GET 一覧に戻る"| list
-  create -->|"POST 登録"| create_proc
-  create_proc -.->|"302 Redirect"| list
-  create_proc -->|"400 入力不正"| err400
-
-  list -->|"GET 詳細"| detail
-  detail -->|"GET 一覧に戻る"| list
-
-  list -->|"GET 編集"| edit
-  detail -->|"GET 編集"| edit
-  edit -->|"GET 詳細に戻る"| detail
-  edit -->|"GET 一覧に戻る"| list
-  edit -->|"POST 変更を保存"| update_proc
-  update_proc -->|"400 入力不正（再描画）"| edit
-  update_proc -.->|"302 Redirect"| detail
-
-  list -->|"GET 削除"| del_confirm
-  detail -->|"GET 削除"| del_confirm
-  del_confirm -->|"GET キャンセル"| detail
-  del_confirm -->|"POST 削除する"| del_proc
-  del_proc -.->|"302 Redirect"| list
-
-  detail -->|"404"| notfound
-  edit -->|"404"| notfound
-  del_confirm -->|"404"| notfound
-  update_proc -->|"404"| notfound
-  del_proc -->|"404"| notfound
-  notfound -->|"GET 一覧に戻る"| list
-```
-
-#### 3.2.2. 共通通信シーケンス（一覧・詳細・CRUD）
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor User as 利用者ブラウザ
-  participant Server as app5.js (Express / EJS / SQLite)
-
-  User->>Server: GET /:resource (?絞り込み条件)
-  Server-->>User: 一覧HTML (EJS SSR)
-
-  User->>Server: GET /:resource/create
-  Server-->>User: /public/:resource_add.html へリダイレクト
-  User->>Server: POST /:resource (フォームデータ)
-  Server-->>User: 登録後 /:resource へリダイレクト
-
-  User->>Server: GET /:resource/:id
-  Server-->>User: 詳細HTML (不在時は 404)
-
-  User->>Server: GET /:resource/edit/:id
-  Server-->>User: 編集フォームHTML (不在時は 404)
-  User->>Server: POST /:resource/update/:id (フォームデータ)
-  Server-->>User: 更新後 /:resource/:id へリダイレクト (不正時は 400 再表示)
-
-  User->>Server: GET /:resource/delete/:id
-  Server-->>User: 削除確認HTML (不在時は 404)
-  User->>Server: POST /:resource/delete/:id
-  Server-->>User: 削除後 /:resource へリダイレクト
-```
-
-### 3.3. システム1：授業・時間割管理（`/classes`）
-
-#### 3.3.1. 関連ファイル
+#### 3.2.1. 関連ファイル
 
 - サーバ: `app5.js`（`/classes` 系ルート）
 - テンプレート: `views/classes.ejs`, `views/classes_detail.ejs`, `views/classes_edit.ejs`, `views/classes_delete.ejs`
 - 静的ファイル: `public/app.css`, `public/classes_add.html`
 
-#### 3.3.2. データモデル（`ClassItem` / `classes` テーブル）
+#### 3.2.2. データモデル（`ClassItem` / `classes` テーブル）
 
 | フィールド | 型（SQLite 型） | 説明 |
 | --- | --- | --- |
@@ -263,7 +182,7 @@ sequenceDiagram
 | `credits` | `number`（`INTEGER NOT NULL DEFAULT 2`） | 単位数（`1`〜`10` の整数、未指定時 `2`） |
 | `memo` | `string`（`TEXT NOT NULL DEFAULT ''`） | メモ（任意、既定値 `""`） |
 
-#### 3.3.3. ルート仕様
+#### 3.2.3. ルート仕様
 
 | メソッド・パス | 概要 | クエリ / リクエストボディ | レスポンス |
 | --- | --- | --- | --- |
@@ -276,15 +195,62 @@ sequenceDiagram
 | `GET /classes/delete/:id` | 授業削除確認画面 | パス `id` | HTML（`views/classes_delete.ejs` / 不在時 `404`） |
 | `POST /classes/delete/:id` | 授業削除実行 | パス `id` | 成功時 `/classes` へリダイレクト / 不在時 `404` |
 
-### 3.4. システム2：積みゲー・積読リスト（`/backlog`）
+#### 3.2.4. 画面遷移図
 
-#### 3.4.1. 関連ファイル
+```mermaid
+flowchart LR
+  list["一覧・絞り込み<br/>GET /classes"]
+  detail["詳細表示<br/>GET /classes/:id"]
+  create["新規登録<br/>GET /classes/create"]
+  create_proc(["新規登録処理<br/>POST /classes"])
+  edit["編集<br/>GET /classes/edit/:id"]
+  update_proc(["更新処理<br/>POST /classes/update/:id"])
+  del_confirm["削除確認<br/>GET /classes/delete/:id"]
+  del_proc(["削除処理<br/>POST /classes/delete/:id"])
+  err400["400 エラー"]
+  notfound["404 画面"]
+
+  list -->|"絞り込み / クリア"| list
+  list -->|"追加"| create
+  create -->|"一覧に戻る"| list
+  create -->|"登録"| create_proc
+  create_proc -.->|"302"| list
+  create_proc -->|"400"| err400
+
+  list -->|"詳細"| detail
+  detail -->|"一覧に戻る"| list
+
+  list -->|"編集"| edit
+  detail -->|"編集"| edit
+  edit -->|"詳細に戻る"| detail
+  edit -->|"一覧に戻る"| list
+  edit -->|"変更を保存"| update_proc
+  update_proc -->|"400 再描画"| edit
+  update_proc -.->|"302"| detail
+
+  list -->|"削除"| del_confirm
+  detail -->|"削除"| del_confirm
+  del_confirm -->|"キャンセル"| detail
+  del_confirm -->|"削除する"| del_proc
+  del_proc -.->|"302"| list
+
+  detail -->|"404"| notfound
+  edit -->|"404"| notfound
+  del_confirm -->|"404"| notfound
+  update_proc -->|"404"| notfound
+  del_proc -->|"404"| notfound
+  notfound -->|"一覧に戻る"| list
+```
+
+### 3.3. システム2：積みゲー・積読リスト（`/backlog`）
+
+#### 3.3.1. 関連ファイル
 
 - サーバ: `app5.js`（`/backlog` 系ルート）
 - テンプレート: `views/backlog.ejs`, `views/backlog_detail.ejs`, `views/backlog_edit.ejs`, `views/backlog_delete.ejs`
 - 静的ファイル: `public/app.css`, `public/backlog_add.html`
 
-#### 3.4.2. データモデル（`BacklogItem` / `backlog` テーブル）
+#### 3.3.2. データモデル（`BacklogItem` / `backlog` テーブル）
 
 | フィールド | 型（SQLite 型） | 説明 |
 | --- | --- | --- |
@@ -297,7 +263,7 @@ sequenceDiagram
 | `status` | `string`（`TEXT NOT NULL DEFAULT '未着手'`） | ステータス（`未着手` / `進行中` / `完了` / `断念`） |
 | `memo` | `string`（`TEXT NOT NULL DEFAULT ''`） | メモ（任意、既定値 `""`） |
 
-#### 3.4.3. ルート仕様
+#### 3.3.3. ルート仕様
 
 | メソッド・パス | 概要 | クエリ / リクエストボディ | レスポンス |
 | --- | --- | --- | --- |
@@ -310,11 +276,58 @@ sequenceDiagram
 | `GET /backlog/delete/:id` | アイテム削除確認画面 | パス `id` | HTML（`views/backlog_delete.ejs` / 不在時 `404`） |
 | `POST /backlog/delete/:id` | アイテム削除実行 | パス `id` | 成功時 `/backlog` へリダイレクト / 不在時 `404` |
 
-### 3.5. システム3：第3アプリケーション（未定）
+#### 3.3.4. 画面遷移図
 
-第3アプリケーションのテーマ・関連ファイル・データモデルは未定であり、確定後に本節へ追記する。操作方式・リソース名・ページ遷移はシステム1・2と統一する方針とする。
+```mermaid
+flowchart LR
+  list["一覧・絞り込み<br/>GET /backlog"]
+  detail["詳細表示<br/>GET /backlog/:id"]
+  create["新規登録<br/>GET /backlog/create"]
+  create_proc(["新規登録処理<br/>POST /backlog"])
+  edit["編集<br/>GET /backlog/edit/:id"]
+  update_proc(["更新処理<br/>POST /backlog/update/:id"])
+  del_confirm["削除確認<br/>GET /backlog/delete/:id"]
+  del_proc(["削除処理<br/>POST /backlog/delete/:id"])
+  err400["400 エラー"]
+  notfound["404 画面"]
 
-### 3.6. 授業で説明していない技術の概要と採用理由
+  list -->|"絞り込み / クリア"| list
+  list -->|"追加"| create
+  create -->|"一覧に戻る"| list
+  create -->|"登録"| create_proc
+  create_proc -.->|"302"| list
+  create_proc -->|"400"| err400
+
+  list -->|"詳細"| detail
+  detail -->|"一覧に戻る"| list
+
+  list -->|"編集"| edit
+  detail -->|"編集"| edit
+  edit -->|"詳細に戻る"| detail
+  edit -->|"一覧に戻る"| list
+  edit -->|"変更を保存"| update_proc
+  update_proc -->|"400 再描画"| edit
+  update_proc -.->|"302"| detail
+
+  list -->|"削除"| del_confirm
+  detail -->|"削除"| del_confirm
+  del_confirm -->|"キャンセル"| detail
+  del_confirm -->|"削除する"| del_proc
+  del_proc -.->|"302"| list
+
+  detail -->|"404"| notfound
+  edit -->|"404"| notfound
+  del_confirm -->|"404"| notfound
+  update_proc -->|"404"| notfound
+  del_proc -->|"404"| notfound
+  notfound -->|"一覧に戻る"| list
+```
+
+### 3.4. システム3：第3アプリケーション（未定）
+
+第3アプリケーションのテーマ・関連ファイル・データモデル・画面遷移図は未定であり、確定後に本節へ追記する。操作方式・リソース名・ページ遷移はシステム1・2と統一する方針とする。
+
+### 3.5. 授業で説明していない技術の概要と採用理由
 
 | 技術名 | 概要 | 採用の理由 |
 | --- | --- | --- |
