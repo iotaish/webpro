@@ -4,7 +4,6 @@
   <meta charset="utf-8">
   <title><%= data ? data.title + " - 詳細" : "アイテムが見つかりません" %></title>
   <link rel="stylesheet" href="/public/app.css">
-  <script src="/public/backlog_detail.js" defer></script>
 </head>
 <body>
   <% if (!data) { %>
@@ -12,68 +11,51 @@
     <p>指定された ID（<%= id %>）のデータは存在しません。</p>
     <a href="/backlog" class="btn">一覧に戻る</a>
   <% } else { %>
-    <div id="backlog-detail-root" data-id="<%= data.id %>">
-      <h2 id="detail-heading"><%= data.title %> の詳細</h2>
-      <div id="status-message" class="status-message" aria-live="polite"></div>
+    <h2><%= data.title %> の詳細</h2>
 
-      <form id="backlog-edit-form">
-        <table class="detail-table">
-          <tr>
-            <th>項目</th>
-            <th>データ（直接編集可能）</th>
-          </tr>
-          <tr>
-            <th><label>ID</label></th>
-            <td id="detail-id"><%= data.id %></td>
-          </tr>
-          <tr>
-            <th><label for="edit-title">タイトル</label></th>
-            <td><input type="text" id="edit-title" name="title" value="<%= data.title %>" required></td>
-          </tr>
-          <tr>
-            <th><label for="edit-type">種別</label></th>
-            <td>
-              <select id="edit-type" name="type" required>
-                <% for (let t of types) { %>
-                  <option value="<%= t %>" <%= data.type === t ? "selected" : "" %>><%= t %></option>
-                <% } %>
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <th><label for="edit-platform">媒体・プラットフォーム</label></th>
-            <td><input type="text" id="edit-platform" name="platform" value="<%= data.platform %>" required></td>
-          </tr>
-          <tr>
-            <th><label for="edit-years">積み年数（年）</label></th>
-            <td><input type="number" id="edit-years" name="yearsStacked" min="0" max="50" value="<%= data.yearsStacked %>" required></td>
-          </tr>
-          <tr>
-            <th><label for="edit-hours">想定所要時間（時間）</label></th>
-            <td><input type="number" id="edit-hours" name="estimatedHours" min="1" max="1000" value="<%= data.estimatedHours %>" required></td>
-          </tr>
-          <tr>
-            <th><label for="edit-status">ステータス</label></th>
-            <td>
-              <select id="edit-status" name="status" required>
-                <% for (let s of statuses) { %>
-                  <option value="<%= s %>" <%= data.status === s ? "selected" : "" %>><%= s %></option>
-                <% } %>
-              </select>
-            </td>
-          </tr>
-          <tr>
-            <th><label for="edit-memo">メモ</label></th>
-            <td><textarea id="edit-memo" name="memo" rows="3"><%= data.memo %></textarea></td>
-          </tr>
-        </table>
+    <table class="detail-table">
+      <tr>
+        <th>項目</th>
+        <th>データ</th>
+      </tr>
+      <tr>
+        <th>ID</th>
+        <td><%= data.id %></td>
+      </tr>
+      <tr>
+        <th>タイトル</th>
+        <td><%= data.title %></td>
+      </tr>
+      <tr>
+        <th>種別</th>
+        <td><%= data.type %></td>
+      </tr>
+      <tr>
+        <th>媒体・プラットフォーム</th>
+        <td><%= data.platform %></td>
+      </tr>
+      <tr>
+        <th>積み年数</th>
+        <td><%= data.yearsStacked %>年</td>
+      </tr>
+      <tr>
+        <th>想定所要時間</th>
+        <td><%= data.estimatedHours %>時間</td>
+      </tr>
+      <tr>
+        <th>ステータス</th>
+        <td><%= data.status %></td>
+      </tr>
+      <tr>
+        <th>メモ</th>
+        <td><%= data.memo || "なし" %></td>
+      </tr>
+    </table>
 
-        <div class="actions">
-          <button type="submit" class="btn btn-primary">変更を保存</button>
-          <button type="button" id="delete-btn" class="btn btn-danger">このアイテムを削除</button>
-          <a href="/backlog" class="btn">一覧に戻る</a>
-        </div>
-      </form>
+    <div class="actions">
+      <a href="/backlog/edit/<%= data.id %>" class="btn btn-primary">編集</a>
+      <a href="/backlog/delete/<%= data.id %>" class="btn btn-danger">削除</a>
+      <a href="/backlog" class="btn">一覧に戻る</a>
     </div>
   <% } %>
 </body>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title><%= data ? data.title + " - 削除確認" : "アイテムが見つかりません" %></title>
+  <link rel="stylesheet" href="/public/app.css">
+</head>
+<body>
+  <% if (!data) { %>
+    <h2>アイテムが見つかりません</h2>
+    <p>指定された ID（<%= id %>）のデータは存在しません。</p>
+    <a href="/backlog" class="btn">一覧に戻る</a>
+  <% } else { %>
+    <h2>アイテムの削除確認</h2>
+    <p>以下のアイテムを削除しますか？</p>
+
+    <table class="detail-table">
+      <tr>
+        <th>ID</th>
+        <td><%= data.id %></td>
+      </tr>
+      <tr>
+        <th>タイトル</th>
+        <td><%= data.title %></td>
+      </tr>
+      <tr>
+        <th>種別</th>
+        <td><%= data.type %></td>
+      </tr>
+      <tr>
+        <th>媒体・プラットフォーム</th>
+        <td><%= data.platform %></td>
+      </tr>
+      <tr>
+        <th>ステータス</th>
+        <td><%= data.status %></td>
+      </tr>
+    </table>
+
+    <form action="/backlog/delete/<%= data.id %>" method="POST" class="actions">
+      <button type="submit" class="btn btn-danger">削除する</button>
+      <a href="/backlog/<%= data.id %>" class="btn">キャンセル</a>
+    </form>
+  <% } %>
+</body>
+</html>

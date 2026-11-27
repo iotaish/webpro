@@ -4,13 +4,11 @@
   <meta charset="UTF-8">
   <title>アイテムを追加する</title>
   <link rel="stylesheet" href="/public/app.css">
-  <script src="/public/backlog_add.js" defer></script>
 </head>
 <body>
   <h2>積みゲー・積読の登録</h2>
-  <div id="status-message" class="status-message" aria-live="polite"></div>
 
-  <form id="backlog-add-form">
+  <form action="/backlog" method="POST">
     <div class="form-group">
       <label for="title">タイトル</label>
       <input type="text" name="title" id="title" required>
