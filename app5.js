@@ -144,14 +144,58 @@ let station2 = [
 
 app.get("/keiyo2", (req, res) => {
   // 本来ならここにDBとのやり取りが入る
-  res.render('keiyo2', {data: station2} );
+  res.render('keiyo2', { data: station2 });
+});
+
+app.get("/keiyo2/create", (req, res) => {
+  res.redirect('/public/keiyo2_new.html');
 });
 
 app.get("/keiyo2/:number", (req, res) => {
   // 本来ならここにDBとのやり取りが入る
   const number = req.params.number;
-  const detail = station2[ number ];
-  res.render('keiyo2_detail', {data: detail} );
+  const detail = station2[number];
+  res.render('keiyo2_detail', { id: number, data: detail });
+});
+
+app.get("/keiyo2/delete/:number", (req, res) => {
+  // 本来は削除の確認ページを表示する
+  // 本来は削除する番号が存在するか厳重にチェックする
+  // 本来ならここにDBとのやり取りが入る
+  station2.splice(req.params.number, 1);
+  res.redirect('/keiyo2');
+});
+
+app.post("/keiyo2", (req, res) => {
+  // 本来ならここにDBとのやり取りが入る
+  const id = station2.length + 1;
+  const code = req.body.code;
+  const name = req.body.name;
+  const change = req.body.change;
+  const passengers = req.body.passengers;
+  const distance = req.body.distance;
+  station2.push({ id: id, code: code, name: name, change: change, passengers: passengers, distance: distance });
+  console.log(station2);
+  res.render('keiyo2', { data: station2 });
+});
+
+app.get("/keiyo2/edit/:number", (req, res) => {
+  // 本来ならここにDBとのやり取りが入る
+  const number = req.params.number;
+  const detail = station2[number];
+  res.render('keiyo2_edit', { id: number, data: detail });
+});
+
+app.post("/keiyo2/update/:number", (req, res) => {
+  // 本来は変更する番号が存在するか，各項目が正しいか厳重にチェックする
+  // 本来ならここにDBとのやり取りが入る
+  station2[req.params.number].code = req.body.code;
+  station2[req.params.number].name = req.body.name;
+  station2[req.params.number].change = req.body.change;
+  station2[req.params.number].passengers = req.body.passengers;
+  station2[req.params.number].distance = req.body.distance;
+  console.log(station2);
+  res.redirect('/keiyo2');
 });
 
 const dbPath = process.env.TIMETABLE_DB_PATH || path.join(__dirname, "timetable.db");
