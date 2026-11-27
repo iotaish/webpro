@@ -165,25 +165,51 @@
 
 #### 3.2.1. 共通画面遷移図
 
+画面（矩形）と処理エンドポイント（角丸）を分離し、`GET` 遷移・`POST` 送信・`302` リダイレクト（PRG パターン）・`400`/`404` 異常系を明示した遷移図を以下に示す。
+
 ```mermaid
-stateDiagram-v2
-  [*] --> List: GET /:resource
-  List --> List: 絞り込み (GET /:resource?条件)
-  List --> AddForm: 「追加」クリック (GET /:resource/create)
-  AddForm --> List: 登録成功 (POST /:resource)
-  List --> Detail: 項目名 / 「詳細」クリック (GET /:resource/:id)
-  Detail --> List: 「一覧に戻る」クリック
-  List --> EditForm: 「編集」クリック (GET /:resource/edit/:id)
-  Detail --> EditForm: 「編集」クリック (GET /:resource/edit/:id)
-  EditForm --> EditForm: 入力不正 (400 エラー再表示)
-  EditForm --> Detail: 更新成功 (POST /:resource/update/:id)
-  EditForm --> List: 「一覧に戻る」クリック
-  List --> DeleteConfirm: 「削除」クリック (GET /:resource/delete/:id)
-  Detail --> DeleteConfirm: 「削除」クリック (GET /:resource/delete/:id)
-  DeleteConfirm --> Detail: 「キャンセル」クリック
-  DeleteConfirm --> List: 削除実行 (POST /:resource/delete/:id)
-  List --> NotFound: 不正 ID アクセス (404)
-  NotFound --> List: 「一覧に戻る」クリック
+flowchart LR
+  list["一覧・絞り込み画面<br/>GET /:resource"]
+  detail["詳細画面<br/>GET /:resource/:id"]
+  create["新規登録画面<br/>GET /:resource/create<br/>→ /:resource_add.html"]
+  create_proc(["新規登録処理<br/>POST /:resource"])
+  edit["編集画面<br/>GET /:resource/edit/:id"]
+  update_proc(["更新処理<br/>POST /:resource/update/:id"])
+  del_confirm["削除確認画面<br/>GET /:resource/delete/:id"]
+  del_proc(["削除処理<br/>POST /:resource/delete/:id"])
+  err400["400 エラー応答"]
+  notfound["404 画面<br/>（存在しない ID）"]
+
+  list -->|"GET 絞り込み / 条件クリア"| list
+  list -->|"GET 追加"| create
+  create -->|"GET 一覧に戻る"| list
+  create -->|"POST 登録"| create_proc
+  create_proc -.->|"302 Redirect"| list
+  create_proc -->|"400 入力不正"| err400
+
+  list -->|"GET 詳細"| detail
+  detail -->|"GET 一覧に戻る"| list
+
+  list -->|"GET 編集"| edit
+  detail -->|"GET 編集"| edit
+  edit -->|"GET 詳細に戻る"| detail
+  edit -->|"GET 一覧に戻る"| list
+  edit -->|"POST 変更を保存"| update_proc
+  update_proc -->|"400 入力不正（再描画）"| edit
+  update_proc -.->|"302 Redirect"| detail
+
+  list -->|"GET 削除"| del_confirm
+  detail -->|"GET 削除"| del_confirm
+  del_confirm -->|"GET キャンセル"| detail
+  del_confirm -->|"POST 削除する"| del_proc
+  del_proc -.->|"302 Redirect"| list
+
+  detail -->|"404"| notfound
+  edit -->|"404"| notfound
+  del_confirm -->|"404"| notfound
+  update_proc -->|"404"| notfound
+  del_proc -->|"404"| notfound
+  notfound -->|"GET 一覧に戻る"| list
 ```
 
 #### 3.2.2. 共通通信シーケンス（一覧・詳細・CRUD）
