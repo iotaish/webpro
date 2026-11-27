@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>AIサブスク・API従量コスト監査</title>
+  <link rel="stylesheet" href="/public/app.css">
+</head>
+<body>
+  <h2>AIサブスク・API従量コスト監査</h2>
+
+  <%
+    const totalSubUsd = data.reduce((sum, item) => sum + Number(item.monthlySubCostUsd || 0), 0);
+    const totalApiUsd = data.reduce((sum, item) => sum + Number(item.apiEquivalentUsd || 0), 0);
+    const totalDiffUsd = totalApiUsd - totalSubUsd;
+    const formatSignedUsd = (val) => {
+      const n = Number(val || 0);
+      return `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
+    };
+  %>
+  <div class="summary-bar">
+    表示件数: <%= data.length %> 件 /
+    月額定額合計: $<%= totalSubUsd.toFixed(2) %> /
+    API理論額合計: $<%= totalApiUsd.toFixed(2) %> /
+    定額 vs API 差額: <%= formatSignedUsd(totalDiffUsd) %>
+    （<%= totalDiffUsd >= 0 ? "定額がお得" : "API従量が割安" %>）
+  </div>
+
+  <div class="actions">
+    <a href="/ai-audit/create" class="btn btn-primary">＋ 新しい監査項目を追加する</a>
+  </div>
+
+  <form action="/ai-audit" method="GET" class="filter-bar">
+    <label for="filter-grade">モデル階級:</label>
+    <select id="filter-grade" name="grade">
+      <option value="">すべて</option>
+      <% for (let g of grades) { %>
+        <option value="<%= g %>" <%= grade === g ? "selected" : "" %>><%= g %></option>
+      <% } %>
+    </select>
+
+    <label for="filter-status">ステータス:</label>
+    <select id="filter-status" name="status">
+      <option value="">すべて</option>
+      <% for (let s of statuses) { %>
+        <option value="<%= s %>" <%= status === s ? "selected" : "" %>><%= s %></option>
+      <% } %>
+    </select>
+
+    <label for="filter-keyword">検索:</label>
+    <input type="text" id="filter-keyword" name="q" value="<%= q %>" placeholder="サービス名・モデル名・メモ">
+    <button type="submit" class="btn">絞り込み</button>
+    <a href="/ai-audit" class="btn">条件クリア</a>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>サービス・プラン名</th>
+        <th>モデル（階級）</th>
+        <th>周期</th>
+        <th>月額換算定額</th>
+        <th>API理論額</th>
+        <th>定額 vs API 差額</th>
+        <th>ステータス</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (data.length === 0) { %>
+        <tr>
+          <td colspan="9">該当する監査データはありません。</td>
+        </tr>
+      <% } else { %>
+        <% for (let row of data) { %>
+          <tr>
+            <td><%= row.id %></td>
+            <td><a href="/ai-audit/<%= row.id %>"><%= row.serviceName %></a></td>
+            <td><%= row.provider %> / <%= row.modelName %> (<%= row.grade %>)</td>
+            <td><%= row.billingCycle %></td>
+            <td>$<%= Number(row.monthlySubCostUsd).toFixed(2) %></td>
+            <td>$<%= Number(row.apiEquivalentUsd).toFixed(2) %></td>
+            <td><%= formatSignedUsd(row.savingsUsd) %></td>
+            <td><%= row.status %></td>
+            <td class="actions">
+              <a href="/ai-audit/<%= row.id %>" class="btn">詳細</a>
+              <a href="/ai-audit/edit/<%= row.id %>" class="btn">編集</a>
+              <a href="/ai-audit/delete/<%= row.id %>" class="btn btn-danger">削除</a>
+            </td>
+          </tr>
+        <% } %>
+      <% } %>
+    </tbody>
+  </table>
+
+  <h3>プロバイダ × モデル階級別 クロス集計</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>プロバイダ</th>
+        <th>モデル階級</th>
+        <th>件数</th>
+        <th>月額定額合計</th>
+        <th>API理論額合計</th>
+        <th>定額 vs API 差額合計</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (crossSummary.length === 0) { %>
+        <tr>
+          <td colspan="6">集計対象データはありません。</td>
+        </tr>
+      <% } else { %>
+        <% for (let summaryRow of crossSummary) { %>
+          <tr>
+            <td><%= summaryRow.provider %></td>
+            <td><%= summaryRow.grade %></td>
+            <td><%= summaryRow.itemCount %> 件</td>
+            <td>$<%= Number(summaryRow.totalSubUsd).toFixed(2) %></td>
+            <td>$<%= Number(summaryRow.totalApiUsd).toFixed(2) %></td>
+            <td><%= formatSignedUsd(summaryRow.totalSavingsUsd) %></td>
+          </tr>
+        <% } %>
+      <% } %>
+    </tbody>
+  </table>
+</body>
+</html>

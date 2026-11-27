@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>AIコスト監査を登録する</title>
+  <link rel="stylesheet" href="/public/app.css">
+</head>
+<body>
+  <h2>AIサブスク・API利用監査の登録</h2>
+
+  <form action="/ai-audit" method="POST">
+    <div class="form-group">
+      <label for="serviceName">サービス・プラン名</label>
+      <input type="text" name="serviceName" id="serviceName" placeholder="例: ChatGPT Plus / Claude Pro" required>
+    </div>
+    <div class="form-group">
+      <label for="modelId">利用モデル（プロバイダ / 階級 / 入出力単価）</label>
+      <select name="modelId" id="modelId" required>
+        <option value="1" selected>OpenAI / GPT-5.2（Frontier: 入力 $1.75 / 出力 $14.00 per 1M）</option>
+        <option value="2">OpenAI / GPT-5 mini（Mini: 入力 $0.25 / 出力 $2.00 per 1M）</option>
+        <option value="3">Anthropic / Claude Opus 4.5（Frontier: 入力 $5.00 / 出力 $25.00 per 1M）</option>
+        <option value="4">Anthropic / Claude Sonnet 4.5（Standard: 入力 $3.00 / 出力 $15.00 per 1M）</option>
+        <option value="5">Google / Gemini 2.5 Pro（Standard: 入力 $1.25 / 出力 $10.00 per 1M）</option>
+        <option value="6">Google / Gemini 2.5 Flash（Mini: 入力 $0.15 / 出力 $0.60 per 1M）</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="billingCycle">契約周期</label>
+      <select name="billingCycle" id="billingCycle" required>
+        <option value="月額" selected>月額</option>
+        <option value="年額">年額</option>
+        <option value="従量のみ">従量のみ</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="contractFeeUsd">契約額（USD / 従量のみの場合は 0）</label>
+      <input type="number" name="contractFeeUsd" id="contractFeeUsd" min="0" max="10000" step="0.01" value="20" required>
+    </div>
+    <div class="form-group">
+      <label for="inputTokensM">月間入力トークン数（100万トークン単位 M）</label>
+      <input type="number" name="inputTokensM" id="inputTokensM" min="0" max="10000" step="0.01" value="0" required>
+    </div>
+    <div class="form-group">
+      <label for="outputTokensM">月間出力トークン数（100万トークン単位 M）</label>
+      <input type="number" name="outputTokensM" id="outputTokensM" min="0" max="10000" step="0.01" value="0" required>
+    </div>
+    <div class="form-group">
+      <label for="status">監査ステータス</label>
+      <select name="status" id="status" required>
+        <option value="継続中" selected>継続中</option>
+        <option value="要見直し">要見直し</option>
+        <option value="解約候補">解約候補</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="memo">監査メモ</label>
+      <textarea name="memo" id="memo" rows="3" placeholder="利用目的や契約見直しメモ"></textarea>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn btn-primary">登録</button>
+      <a href="/ai-audit" class="btn">一覧に戻る</a>
+    </div>
+  </form>
+</body>
+</html>

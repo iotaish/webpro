@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title><%= data ? data.serviceName + " - 詳細" : "監査データが見つかりません" %></title>
+  <link rel="stylesheet" href="/public/app.css">
+</head>
+<body>
+  <% if (!data) { %>
+    <h2>監査データが見つかりません</h2>
+    <p>指定された ID（<%= id %>）のデータは存在しません。</p>
+    <a href="/ai-audit" class="btn">一覧に戻る</a>
+  <% } else { %>
+    <%
+      const savings = Number(data.savingsUsd || 0);
+      const signedSavings = `${savings >= 0 ? "+" : "-"}$${Math.abs(savings).toFixed(2)}`;
+    %>
+    <h2><%= data.serviceName %> の詳細</h2>
+
+    <table class="detail-table">
+      <tr>
+        <th>項目</th>
+        <th>データ</th>
+      </tr>
+      <tr>
+        <th>ID</th>
+        <td><%= data.id %></td>
+      </tr>
+      <tr>
+        <th>サービス・プラン名</th>
+        <td><%= data.serviceName %></td>
+      </tr>
+      <tr>
+        <th>利用モデル</th>
+        <td><%= data.provider %> / <%= data.modelName %>（階級: <%= data.grade %>）</td>
+      </tr>
+      <tr>
+        <th>モデル API 単価</th>
+        <td>入力 $<%= Number(data.inputPricePer1M).toFixed(2) %> / 出力 $<%= Number(data.outputPricePer1M).toFixed(2) %>（per 1M tokens）</td>
+      </tr>
+      <tr>
+        <th>契約周期</th>
+        <td><%= data.billingCycle %></td>
+      </tr>
+      <tr>
+        <th>契約額（入力値）</th>
+        <td>$<%= Number(data.contractFeeUsd).toFixed(2) %></td>
+      </tr>
+      <tr>
+        <th>月額換算定額</th>
+        <td>$<%= Number(data.monthlySubCostUsd).toFixed(2) %></td>
+      </tr>
+      <tr>
+        <th>月間入力トークン数</th>
+        <td><%= Number(data.inputTokensM).toFixed(2) %> M</td>
+      </tr>
+      <tr>
+        <th>月間出力トークン数</th>
+        <td><%= Number(data.outputTokensM).toFixed(2) %> M</td>
+      </tr>
+      <tr>
+        <th>API 理論額（JOIN 算出）</th>
+        <td>$<%= Number(data.apiEquivalentUsd).toFixed(2) %></td>
+      </tr>
+      <tr>
+        <th>定額 vs API 差額</th>
+        <td><%= signedSavings %>（<%= savings >= 0 ? "定額がお得" : "API従量が割安" %>）</td>
+      </tr>
+      <tr>
+        <th>監査ステータス</th>
+        <td><%= data.status %></td>
+      </tr>
+      <tr>
+        <th>監査メモ</th>
+        <td><%= data.memo || "なし" %></td>
+      </tr>
+    </table>
+
+    <div class="actions">
+      <a href="/ai-audit/edit/<%= data.id %>" class="btn btn-primary">編集</a>
+      <a href="/ai-audit/delete/<%= data.id %>" class="btn btn-danger">削除</a>
+      <a href="/ai-audit" class="btn">一覧に戻る</a>
+    </div>
+  <% } %>
+</body>
+</html>
