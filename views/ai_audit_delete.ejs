@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title><%= data ? data.serviceName + " - 削除確認" : "監査データが見つかりません" %></title>
+  <link rel="stylesheet" href="/public/app.css">
+</head>
+<body>
+  <% if (!data) { %>
+    <h2>監査データが見つかりません</h2>
+    <p>指定された ID（<%= id %>）のデータは存在しません。</p>
+    <a href="/ai-audit" class="btn">一覧に戻る</a>
+  <% } else { %>
+    <h2>監査データの削除確認</h2>
+    <p>以下の監査データを削除しますか？</p>
+
+    <table class="detail-table">
+      <tr>
+        <th>ID</th>
+        <td><%= data.id %></td>
+      </tr>
+      <tr>
+        <th>サービス・プラン名</th>
+        <td><%= data.serviceName %></td>
+      </tr>
+      <tr>
+        <th>利用モデル</th>
+        <td><%= data.provider %> / <%= data.modelName %>（<%= data.grade %>）</td>
+      </tr>
+      <tr>
+        <th>月額換算定額 / API理論額</th>
+        <td>$<%= Number(data.monthlySubCostUsd).toFixed(2) %> / $<%= Number(data.apiEquivalentUsd).toFixed(2) %></td>
+      </tr>
+      <tr>
+        <th>監査ステータス</th>
+        <td><%= data.status %></td>
+      </tr>
+    </table>
+
+    <form action="/ai-audit/delete/<%= data.id %>" method="POST" class="actions">
+      <button type="submit" class="btn btn-danger">削除する</button>
+      <a href="/ai-audit/<%= data.id %>" class="btn">キャンセル</a>
+    </form>
+  <% } %>
+</body>
+</html>
