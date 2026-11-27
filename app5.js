@@ -334,22 +334,6 @@ function parseClassPayload(body) {
 }
 
 app.get("/classes", (req, res) => {
-  const rows = db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes ORDER BY id ASC`).all();
-  res.render("classes", { data: rows, days: ALLOWED_CLASS_DAYS });
-});
-
-app.get("/classes/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
-    : null;
-  if (!detail) {
-    return res.status(404).render("classes_detail", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS });
-  }
-  res.render("classes_detail", { data: detail, days: ALLOWED_CLASS_DAYS });
-});
-
-app.get("/api/classes", (req, res) => {
   const dayFilter = typeof req.query.day === "string" ? req.query.day.trim() : "";
   const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
 
@@ -366,67 +350,100 @@ app.get("/api/classes", (req, res) => {
   }
 
   const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-  const filtered = db.prepare(
+  const rows = db.prepare(
     `SELECT ${CLASS_COLUMNS} FROM classes${whereClause} ORDER BY id ASC`
   ).all(...params);
 
-  res.json({ data: filtered });
+  res.render("classes", {
+    data: rows,
+    days: ALLOWED_CLASS_DAYS,
+    day: dayFilter,
+    q: typeof req.query.q === "string" ? req.query.q.trim() : ""
+  });
 });
 
-app.get("/api/classes/:id", (req, res) => {
+app.get("/classes/create", (req, res) => {
+  res.redirect("/public/classes_add.html");
+});
+
+app.get("/classes/edit/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
   const detail = id
     ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
     : null;
   if (!detail) {
-    return res.status(404).json({ error: "指定された授業が見つかりません。" });
+    return res.status(404).render("classes_edit", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS, error: null });
   }
-  res.json({ data: detail });
+  res.render("classes_edit", { data: detail, days: ALLOWED_CLASS_DAYS, error: null });
 });
 
-app.post("/api/classes", (req, res) => {
+app.get("/classes/delete/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id
+    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
+    : null;
+  if (!detail) {
+    return res.status(404).render("classes_delete", { data: null, id: req.params.id });
+  }
+  res.render("classes_delete", { data: detail });
+});
+
+app.get("/classes/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id
+    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
+    : null;
+  if (!detail) {
+    return res.status(404).render("classes_detail", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS });
+  }
+  res.render("classes_detail", { data: detail, days: ALLOWED_CLASS_DAYS });
+});
+
+app.post("/classes", (req, res) => {
   const parsed = parseClassPayload(req.body);
   if (parsed.error) {
-    return res.status(400).json({ error: parsed.error });
+    return res.status(400).send(parsed.error);
   }
   const v = parsed.value;
-  const result = db.prepare(
+  db.prepare(
     "INSERT INTO classes (course, day, period, room, teacher, credits, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
   ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo);
-  const newClass = db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(Number(result.lastInsertRowid));
-  res.status(201).json({ data: newClass });
+  res.redirect("/classes");
 });
 
-app.put("/api/classes/:id", (req, res) => {
+app.post("/classes/update/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
   const target = id
     ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
     : null;
   if (!target) {
-    return res.status(404).json({ error: "指定された授業が見つかりません。" });
+    return res.status(404).render("classes_edit", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS, error: null });
   }
   const parsed = parseClassPayload(req.body);
   if (parsed.error) {
-    return res.status(400).json({ error: parsed.error });
+    return res.status(400).render("classes_edit", {
+      data: { id, ...req.body },
+      days: ALLOWED_CLASS_DAYS,
+      error: parsed.error
+    });
   }
   const v = parsed.value;
   db.prepare(
     "UPDATE classes SET course = ?, day = ?, period = ?, room = ?, teacher = ?, credits = ?, memo = ? WHERE id = ?"
   ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, id);
-  const updated = db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id);
-  res.json({ data: updated });
+  res.redirect(`/classes/${id}`);
 });
 
-app.delete("/api/classes/:id", (req, res) => {
+app.post("/classes/delete/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
   const target = id
     ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
     : null;
   if (!target) {
-    return res.status(404).json({ error: "指定された授業が見つかりません。" });
+    return res.status(404).render("classes_delete", { data: null, id: req.params.id });
   }
   db.prepare("DELETE FROM classes WHERE id = ?").run(id);
-  res.json({ deleted: target });
+  res.redirect("/classes");
 });
 
 const backlogDbPath = process.env.BACKLOG_DB_PATH || path.join(__dirname, "backlog.db");
@@ -573,12 +590,76 @@ function parseBacklogPayload(body) {
 }
 
 app.get("/backlog", (req, res) => {
-  const rows = backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog ORDER BY id ASC`).all();
+  const typeFilter = typeof req.query.type === "string" ? req.query.type.trim() : "";
+  const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+
+  const conditions = [];
+  const params = [];
+  if (typeFilter) {
+    conditions.push("type = ?");
+    params.push(typeFilter);
+  }
+  if (statusFilter) {
+    conditions.push("status = ?");
+    params.push(statusFilter);
+  }
+  if (keyword) {
+    conditions.push("(LOWER(title) LIKE ? OR LOWER(platform) LIKE ? OR LOWER(memo) LIKE ?)");
+    const likePattern = `%${keyword}%`;
+    params.push(likePattern, likePattern, likePattern);
+  }
+
+  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
+  const rows = backlogDb.prepare(
+    `SELECT ${BACKLOG_COLUMNS} FROM backlog${whereClause} ORDER BY id ASC`
+  ).all(...params);
+
   res.render("backlog", {
     data: rows,
     types: ALLOWED_BACKLOG_TYPES,
-    statuses: ALLOWED_BACKLOG_STATUSES
+    statuses: ALLOWED_BACKLOG_STATUSES,
+    type: typeFilter,
+    status: statusFilter,
+    q: typeof req.query.q === "string" ? req.query.q.trim() : ""
   });
+});
+
+app.get("/backlog/create", (req, res) => {
+  res.redirect("/public/backlog_add.html");
+});
+
+app.get("/backlog/edit/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id
+    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
+    : null;
+  if (!detail) {
+    return res.status(404).render("backlog_edit", {
+      data: null,
+      id: req.params.id,
+      types: ALLOWED_BACKLOG_TYPES,
+      statuses: ALLOWED_BACKLOG_STATUSES,
+      error: null
+    });
+  }
+  res.render("backlog_edit", {
+    data: detail,
+    types: ALLOWED_BACKLOG_TYPES,
+    statuses: ALLOWED_BACKLOG_STATUSES,
+    error: null
+  });
+});
+
+app.get("/backlog/delete/:id", (req, res) => {
+  const id = parsePositiveIntId(req.params.id);
+  const detail = id
+    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
+    : null;
+  if (!detail) {
+    return res.status(404).render("backlog_delete", { data: null, id: req.params.id });
+  }
+  res.render("backlog_delete", { data: detail });
 });
 
 app.get("/backlog/:id", (req, res) => {
@@ -601,89 +682,58 @@ app.get("/backlog/:id", (req, res) => {
   });
 });
 
-app.get("/api/backlog", (req, res) => {
-  const typeFilter = typeof req.query.type === "string" ? req.query.type.trim() : "";
-  const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : "";
-  const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
-
-  const conditions = [];
-  const params = [];
-  if (typeFilter) {
-    conditions.push("type = ?");
-    params.push(typeFilter);
-  }
-  if (statusFilter) {
-    conditions.push("status = ?");
-    params.push(statusFilter);
-  }
-  if (keyword) {
-    conditions.push("(LOWER(title) LIKE ? OR LOWER(platform) LIKE ? OR LOWER(memo) LIKE ?)");
-    const likePattern = `%${keyword}%`;
-    params.push(likePattern, likePattern, likePattern);
-  }
-
-  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-  const filtered = backlogDb.prepare(
-    `SELECT ${BACKLOG_COLUMNS} FROM backlog${whereClause} ORDER BY id ASC`
-  ).all(...params);
-
-  res.json({ data: filtered });
-});
-
-app.get("/api/backlog/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
-    : null;
-  if (!detail) {
-    return res.status(404).json({ error: "指定された積みアイテムが見つかりません。" });
-  }
-  res.json({ data: detail });
-});
-
-app.post("/api/backlog", (req, res) => {
+app.post("/backlog", (req, res) => {
   const parsed = parseBacklogPayload(req.body);
   if (parsed.error) {
-    return res.status(400).json({ error: parsed.error });
+    return res.status(400).send(parsed.error);
   }
   const v = parsed.value;
-  const result = backlogDb.prepare(
+  backlogDb.prepare(
     "INSERT INTO backlog (title, type, platform, yearsStacked, estimatedHours, status, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
   ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo);
-  const created = backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(Number(result.lastInsertRowid));
-  res.status(201).json({ data: created });
+  res.redirect("/backlog");
 });
 
-app.put("/api/backlog/:id", (req, res) => {
+app.post("/backlog/update/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
   const target = id
     ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
     : null;
   if (!target) {
-    return res.status(404).json({ error: "指定された積みアイテムが見つかりません。" });
+    return res.status(404).render("backlog_edit", {
+      data: null,
+      id: req.params.id,
+      types: ALLOWED_BACKLOG_TYPES,
+      statuses: ALLOWED_BACKLOG_STATUSES,
+      error: null
+    });
   }
   const parsed = parseBacklogPayload(req.body);
   if (parsed.error) {
-    return res.status(400).json({ error: parsed.error });
+    return res.status(400).render("backlog_edit", {
+      data: { id, ...req.body },
+      types: ALLOWED_BACKLOG_TYPES,
+      statuses: ALLOWED_BACKLOG_STATUSES,
+      error: parsed.error
+    });
   }
   const v = parsed.value;
   backlogDb.prepare(
     "UPDATE backlog SET title = ?, type = ?, platform = ?, yearsStacked = ?, estimatedHours = ?, status = ?, memo = ? WHERE id = ?"
   ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, id);
-  const updated = backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id);
-  res.json({ data: updated });
+  res.redirect(`/backlog/${id}`);
 });
 
-app.delete("/api/backlog/:id", (req, res) => {
+app.post("/backlog/delete/:id", (req, res) => {
   const id = parsePositiveIntId(req.params.id);
   const target = id
     ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
     : null;
   if (!target) {
-    return res.status(404).json({ error: "指定された積みアイテムが見つかりません。" });
+    return res.status(404).render("backlog_delete", { data: null, id: req.params.id });
   }
   backlogDb.prepare("DELETE FROM backlog WHERE id = ?").run(id);
-  res.json({ deleted: target });
+  res.redirect("/backlog");
 });
 
 const PORT = Number(process.env.PORT) || 8080;
