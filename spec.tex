@@ -1,0 +1,411 @@
+\documentclass[
+  a4paper,
+  fontsize=11pt,
+  line_length=40zw,
+  number_of_lines=35,
+  baselineskip=1.7zw
+]{jlreq}
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage[breaklinks=true, pdfborder={0 0 0}]{hyperref}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  frame=single,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  backgroundcolor=\color{gray!8}
+}
+
+\title{Webアプリケーション開発 仕様書}
+\author{石井 陽泰}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{ソースコードリポジトリ}：\url{https://github.com/iotaish/webpro}
+  \item \textbf{対象サーバファイル}：\texttt{app5.js}
+  \item \textbf{技術スタック}：Node.js / Express / EJS / Vanilla JavaScript (\texttt{fetch}) / SQLite (\texttt{node:sqlite})
+\end{itemize}
+
+\section*{対象アプリケーション一覧}
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{clllX}
+    \toprule
+    No. & アプリケーション名 & 画面URL & APIベースURL & 概要 \\
+    \midrule
+    1 & 授業・時間割管理 & \texttt{/classes} & \texttt{/api/classes} &
+      履修授業（科目名・曜日・時限・教室・担当教員・単位数・メモ）の一覧・検索・CRUD管理 \\
+    2 & 積みゲー・積読リスト & \texttt{/backlog} & \texttt{/api/backlog} &
+      積んでいるゲーム・書籍（種別・媒体・積み年数・想定所要時間・ステータス・メモ）の一覧・絞り込み・CRUD管理 \\
+    3 & 第3アプリケーション（未定） & 未定 & 未定 & 今後策定予定 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\part{利用者向け仕様}
+% ============================================================
+
+本仕様書では，3つのアプリケーションのうち操作体系が共通している代表的なシステムとして
+「授業・時間割管理（\texttt{/classes}）」を例に利用手順を示す。
+
+\section{利用前の準備}
+
+モダンブラウザ（Chrome，Safari，Edge，Firefox 等，JavaScript 有効）から
+サーバの URL（ローカル環境では \url{http://localhost:8080}）へアクセスする。
+
+\section{画面URL一覧}
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{llX}
+    \toprule
+    画面種別 & URL & 備考 \\
+    \midrule
+    一覧画面 & \texttt{GET /classes} & 初期表示は EJS による一覧描画 \\
+    新規追加画面 & \texttt{/public/classes\_add.html} & 登録成功後，一覧画面へ遷移 \\
+    詳細・直接編集・削除画面 & \texttt{GET /classes/:id} & 存在しない ID 指定時は HTTP \texttt{404} 表示 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{基本操作手順}
+
+\subsection{一覧表示・サマリ確認・絞り込み}
+\begin{enumerate}
+  \item 一覧画面 URL（\texttt{/classes}）を開く。
+  \item 画面上部のサマリバーに表示中の件数および合計単位数が表示され，
+    その下に登録データが表形式で一覧表示される。
+  \item 曜日セレクト（\texttt{すべて} / \texttt{月}〜\texttt{土}）またはキーワード検索欄
+    （科目名・教室・担当教員・メモの部分一致）を入力すると，
+    一致するデータのみが即座に再取得されて表とサマリが更新される。
+    「条件クリア」ボタンで絞り込みを解除できる。
+  \item 「一覧を再取得」ボタンを押すと，サーバから最新データを再取得して表を更新し，
+    画面上部中央に緑色の完了通知（トースト）が表示され，約1.8秒後に自動で消える。
+\end{enumerate}
+
+\subsection{詳細表示}
+\begin{enumerate}
+  \item 一覧画面のテーブルにある科目名リンク，または「詳細・編集」ボタンをクリックする。
+  \item 選択した授業の全項目が詳細画面のテーブルに表示される。
+  \item 一覧へ戻りたい場合は「一覧に戻る」リンクをクリックする。
+\end{enumerate}
+
+\subsection{新規追加}
+\begin{enumerate}
+  \item 一覧画面上部の「＋ 新しい授業を追加する」ボタンをクリックして登録画面へ移動する。
+  \item フォームに各項目を入力・選択し，「登録」ボタンをクリックする。
+  \item 入力内容が正しい場合はデータが追加され，一覧画面へ自動的に戻る。
+  \item 必須項目が未入力，選択肢以外，または数値範囲外の場合は，
+    画面上部に赤色のエラーメッセージが表示される。
+\end{enumerate}
+
+\subsection{データの変更（更新）}
+\begin{enumerate}
+  \item 一覧画面から対象授業の「詳細・編集」をクリックし，詳細画面を開く。
+  \item 詳細テーブルの各項目欄（ID を除く）が入力・選択欄になっているため，
+    変更したい値を直接書き換える。
+  \item 「変更を保存」ボタンをクリックすると内容が保存され，
+    ページタイトル・見出し・表示値が同期するとともに緑色の完了通知が約1.8秒間表示される。
+  \item 入力内容が不正な場合は赤色のエラーメッセージが画面上に残る。
+\end{enumerate}
+
+\subsection{データの削除}
+\begin{itemize}
+  \item \textbf{一覧画面から削除する場合}：対象行の「削除」ボタンをクリックし，
+    確認ダイアログで「OK」を選択する。削除後は表とサマリが更新され，完了通知が表示される。
+  \item \textbf{詳細画面から削除する場合}：画面下部の「削除」ボタンをクリックし，
+    確認ダイアログで「OK」を選択すると削除され，一覧画面へ戻る。
+\end{itemize}
+
+\section{入力項目と制限（授業・時間割管理）}
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{llllX}
+    \toprule
+    項目名 & フィールド名 & 必須 & 入力形式 & 制限・初期値 \\
+    \midrule
+    科目名 & \texttt{course} & 必須 & テキスト & 前後空白除去後に空文字不可 \\
+    曜日 & \texttt{day} & 必須 & セレクト & \texttt{月}〜\texttt{土} のみ許可（初期値：\texttt{金}） \\
+    時限 & \texttt{period} & 必須 & テキスト & 前後空白除去後に空文字不可（例：\texttt{2-3限}） \\
+    教室 & \texttt{room} & 必須 & テキスト & 前後空白除去後に空文字不可（例：\texttt{1102}） \\
+    担当教員 & \texttt{teacher} & 任意 & テキスト & 未入力時は空文字 \\
+    単位数 & \texttt{credits} & 任意 & 数値 & \texttt{1}〜\texttt{10} の整数（未指定時は \texttt{2}） \\
+    メモ & \texttt{memo} & 任意 & テキストエリア & 講義概要・自由記述 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ============================================================
+\part{管理者向け仕様}
+% ============================================================
+
+\section{動作環境と依存関係}
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{lX}
+    \toprule
+    項目 & 仕様 \\
+    \midrule
+    実行ランタイム & Node.js（標準組み込み \texttt{node:sqlite} を利用） \\
+    モジュール方式 & CommonJS（\texttt{package.json} の \texttt{"type": "commonjs"}） \\
+    依存パッケージ & \texttt{express} (\texttt{\^{}4.21.2})，\texttt{ejs} (\texttt{\^{}3.1.10}) \\
+    待ち受けポート & \texttt{8080}（\url{http://localhost:8080}，環境変数 \texttt{PORT} で上書き可） \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{起動・停止手順}
+
+\begin{enumerate}
+  \item 初回または依存更新時はリポジトリルートで依存パッケージをインストールする。
+\begin{lstlisting}[language=bash]
+npm install
+\end{lstlisting}
+  \item 以下のコマンドでサーバを起動する（内部で \texttt{node app5.js} を実行）。
+\begin{lstlisting}[language=bash]
+npm start
+\end{lstlisting}
+  \item コンソールに \texttt{Example app listening on port 8080!} が表示されたら起動完了となる。
+  \item 停止する場合は起動中のターミナルで \texttt{Ctrl + C} を押下する。
+\end{enumerate}
+
+\section{データ管理と永続化に関する仕様}
+
+初期実装ではメモリ内配列でデータを管理していたが，
+サーバ再起動時に登録・編集・削除内容が失われるため，
+ファイルベースの永続化（SQLite）を採用した。
+
+\begin{itemize}
+  \item \textbf{授業・時間割管理（\texttt{/classes}）}：
+    \texttt{node:sqlite}（\texttt{DatabaseSync}）を用いて \texttt{timetable.db}
+    （環境変数 \texttt{TIMETABLE\_DB\_PATH} で変更可）の \texttt{classes} テーブルに永続化する。
+    旧スキーマ（\texttt{teacher} / \texttt{credits} / \texttt{memo} 列なし）を読み込んだ場合は
+    \texttt{ALTER TABLE ... ADD COLUMN} により列を拡張する。
+  \item \textbf{積みゲー・積読リスト（\texttt{/backlog}）}：
+    \texttt{backlog.db}（環境変数 \texttt{BACKLOG\_DB\_PATH} で変更可）の
+    \texttt{backlog} テーブルに永続化する。
+  \item \textbf{既存 DB 非初期化ルール（共通）}：
+    起動時に \texttt{.db} ファイルが存在しない場合のみテーブル作成と初期5件の投入を行う。
+    すでに \texttt{.db} ファイルが存在する場合は，全件削除済みであっても再投入せず既存データを読み込む。
+\end{itemize}
+
+\section{運用監視とトラブルシューティング}
+
+\begin{itemize}
+  \item \textbf{ポート競合エラー（\texttt{EADDRINUSE}）}：
+    別プロセスがポート \texttt{8080} を占有している場合は起動に失敗する。
+    \texttt{lsof -i :8080} で確認して停止するか，環境変数 \texttt{PORT} で別ポートを指定する。
+  \item \textbf{不正な入力による \texttt{400 Bad Request}}：
+    必須項目の欠落や範囲外の値が送信された場合，API は HTTP \texttt{400} と
+    \texttt{\{ "error": "..." \}} を返す。
+  \item \textbf{存在しない ID へのアクセス（\texttt{404 Not Found}）}：
+    未登録・削除済み ID または正の整数でない ID が指定された場合，
+    HTML ルートではステータス \texttt{404} の画面を返し，API では \texttt{404} JSON を返す。
+\end{itemize}
+
+% ============================================================
+\part{開発者向け仕様}
+% ============================================================
+
+\section{リポジトリ全体構成と共通設計方針}
+
+\begin{itemize}
+  \item \textbf{リポジトリ URL}：\url{https://github.com/iotaish/webpro}
+  \item \textbf{\texttt{"use strict";} の徹底}：
+    すべてのサーバ側・クライアント側 JS ファイルの先頭に \texttt{"use strict";} を記述する。
+  \item \textbf{統一した操作設計と授業例（\texttt{keiyo2}）との差異理由}：
+    自作アプリケーション間では一覧（\texttt{GET /:resource}），詳細・編集（\texttt{GET /:resource/:id}），
+    新規登録（\texttt{/public/:resource\_add.html}），API（\texttt{/api/:resource}）の
+    リソース名とページ遷移を完全に統一している。
+    授業例の \texttt{keiyo2}（\texttt{/keiyo2/create}・\texttt{/keiyo2/edit/:number}・
+    \texttt{/keiyo2/update/:number}・\texttt{/keiyo2/delete/:number}）と異なる構成を採用した理由は，
+    画面遷移を抑えつつ \texttt{fetch} API による即時絞り込み，詳細画面での直接編集，
+    および HTTP メソッド（\texttt{GET}/\texttt{POST}/\texttt{PUT}/\texttt{DELETE}）による
+    明確な責務分離を実現するためである。
+  \item \textbf{XSS 対策}：
+    クライアント JS での動的描画では \texttt{innerHTML} への文字列連結を行わず，
+    \texttt{document.createElement} と \texttt{textContent} を使用する。
+\end{itemize}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+    node distance=18mm and 26mm,
+    box/.style={draw, rounded corners, minimum width=28mm, minimum height=9mm, align=center, font=\small},
+    ->, >=Stealth
+  ]
+    \node[box] (list) {一覧画面\\\texttt{GET /:resource}};
+    \node[box, right=of list] (detail) {詳細・編集画面\\\texttt{GET /:resource/:id}};
+    \node[box, below=of list] (add) {新規登録画面\\\texttt{/:resource\_add.html}};
+    \node[box, below=of detail] (notfound) {404画面\\不正ID};
+
+    \draw (list) edge[loop left] node[left, align=right, font=\scriptsize] {絞り込み\\再取得\\削除} (list);
+    \draw (list) to[bend left=12] node[above, font=\scriptsize] {詳細・編集} (detail);
+    \draw (detail) to[bend left=12] node[below, font=\scriptsize] {戻る / 削除} (list);
+    \draw (detail) edge[loop right] node[right, align=left, font=\scriptsize] {保存(\texttt{PUT})\\入力不正} (detail);
+    \draw (list) to[bend right=15] node[left, font=\scriptsize] {追加} (add);
+    \draw (add) to[bend right=15] node[right, font=\scriptsize] {登録(\texttt{POST})} (list);
+    \draw (list) -- node[above, sloped, font=\scriptsize] {不正ID} (notfound);
+    \draw (notfound) -- node[below, font=\scriptsize] {一覧に戻る} (list);
+  \end{tikzpicture}
+  \caption{自作アプリケーション共通の画面遷移図}
+  \label{fig:common_transition}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{システム1：授業・時間割管理（\texttt{/classes}）}
+
+\subsection{関連ファイル}
+\begin{itemize}
+  \item サーバ：\texttt{app5.js}（\texttt{/classes}，\texttt{/api/classes} ルート）
+  \item テンプレート：\texttt{views/classes.ejs}，\texttt{views/classes\_detail.ejs}
+  \item 静的ファイル：\texttt{public/app.css}，\texttt{public/classes.js}，
+    \texttt{public/classes\_add.html}，\texttt{public/classes\_add.js}，\texttt{public/classes\_detail.js}
+\end{itemize}
+
+\subsection{データモデル（\texttt{classes} テーブル）}
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{llX}
+    \toprule
+    フィールド & 型（SQLite） & 説明 \\
+    \midrule
+    \texttt{id} & \texttt{INTEGER PRIMARY KEY AUTOINCREMENT} & 正の整数の一意識別子 \\
+    \texttt{course} & \texttt{TEXT NOT NULL} & 科目名（必須） \\
+    \texttt{day} & \texttt{TEXT NOT NULL} & 曜日（\texttt{月}〜\texttt{土}） \\
+    \texttt{period} & \texttt{TEXT NOT NULL} & 時限（必須） \\
+    \texttt{room} & \texttt{TEXT NOT NULL} & 教室（必須） \\
+    \texttt{teacher} & \texttt{TEXT NOT NULL DEFAULT ''} & 担当教員（任意） \\
+    \texttt{credits} & \texttt{INTEGER NOT NULL DEFAULT 2} & 単位数（\texttt{1}〜\texttt{10}） \\
+    \texttt{memo} & \texttt{TEXT NOT NULL DEFAULT ''} & メモ（任意） \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{ルート・API 仕様}
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{llX}
+    \toprule
+    メソッド・パス & 入力 / クエリ & レスポンス \\
+    \midrule
+    \texttt{GET /classes} & — & 一覧 HTML（\texttt{views/classes.ejs}） \\
+    \texttt{GET /classes/:id} & パス \texttt{id} & 詳細 HTML（不在時 \texttt{404}） \\
+    \texttt{GET /api/classes} & \texttt{?day=\&q=} & \texttt{200 \{ data: ClassItem[] \}} \\
+    \texttt{GET /api/classes/:id} & パス \texttt{id} & \texttt{200 \{ data \}} / \texttt{404 \{ error \}} \\
+    \texttt{POST /api/classes} & JSON ボディ & \texttt{201 \{ data \}} / \texttt{400 \{ error \}} \\
+    \texttt{PUT /api/classes/:id} & パス \texttt{id}，JSON & \texttt{200 \{ data \}} / \texttt{400, 404 \{ error \}} \\
+    \texttt{DELETE /api/classes/:id} & パス \texttt{id} & \texttt{200 \{ deleted \}} / \texttt{404 \{ error \}} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ------------------------------------------------------------
+\section{システム2：積みゲー・積読リスト（\texttt{/backlog}）}
+
+\subsection{関連ファイル}
+\begin{itemize}
+  \item サーバ：\texttt{app5.js}（\texttt{/backlog}，\texttt{/api/backlog} ルート）
+  \item テンプレート：\texttt{views/backlog.ejs}，\texttt{views/backlog\_detail.ejs}
+  \item 静的ファイル：\texttt{public/app.css}，\texttt{public/backlog.js}，
+    \texttt{public/backlog\_add.html}，\texttt{public/backlog\_add.js}，\texttt{public/backlog\_detail.js}
+\end{itemize}
+
+\subsection{データモデル（\texttt{backlog} テーブル）}
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{llX}
+    \toprule
+    フィールド & 型（SQLite） & 説明 \\
+    \midrule
+    \texttt{id} & \texttt{INTEGER PRIMARY KEY AUTOINCREMENT} & 正の整数の一意識別子 \\
+    \texttt{title} & \texttt{TEXT NOT NULL} & タイトル（必須） \\
+    \texttt{type} & \texttt{TEXT NOT NULL} & 種別（\texttt{ゲーム} / \texttt{書籍}） \\
+    \texttt{platform} & \texttt{TEXT NOT NULL} & 媒体・プラットフォーム（必須） \\
+    \texttt{yearsStacked} & \texttt{INTEGER NOT NULL DEFAULT 0} & 積み年数（\texttt{0}〜\texttt{50}） \\
+    \texttt{estimatedHours} & \texttt{INTEGER NOT NULL DEFAULT 10} & 想定所要時間（\texttt{1}〜\texttt{1000}） \\
+    \texttt{status} & \texttt{TEXT NOT NULL DEFAULT '未着手'} & ステータス（\texttt{未着手}/\texttt{進行中}/\texttt{完了}/\texttt{断念}） \\
+    \texttt{memo} & \texttt{TEXT NOT NULL DEFAULT ''} & メモ（任意） \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{ルート・API 仕様}
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{llX}
+    \toprule
+    メソッド・パス & 入力 / クエリ & レスポンス \\
+    \midrule
+    \texttt{GET /backlog} & — & 一覧 HTML（\texttt{views/backlog.ejs}） \\
+    \texttt{GET /backlog/:id} & パス \texttt{id} & 詳細 HTML（不在時 \texttt{404}） \\
+    \texttt{GET /api/backlog} & \texttt{?type=\&status=\&q=} & \texttt{200 \{ data: BacklogItem[] \}} \\
+    \texttt{GET /api/backlog/:id} & パス \texttt{id} & \texttt{200 \{ data \}} / \texttt{404 \{ error \}} \\
+    \texttt{POST /api/backlog} & JSON ボディ & \texttt{201 \{ data \}} / \texttt{400 \{ error \}} \\
+    \texttt{PUT /api/backlog/:id} & パス \texttt{id}，JSON & \texttt{200 \{ data \}} / \texttt{400, 404 \{ error \}} \\
+    \texttt{DELETE /api/backlog/:id} & パス \texttt{id} & \texttt{200 \{ deleted \}} / \texttt{404 \{ error \}} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ------------------------------------------------------------
+\section{システム3：第3アプリケーション（未定）}
+
+第3アプリケーションのテーマおよびデータモデルは未定であり，確定後に本節へ追記する。
+操作方式・リソース名・ページ遷移はシステム1・2と統一する方針とする。
+
+% ------------------------------------------------------------
+\section{授業で説明していない技術の概要と採用理由}
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{lXX}
+    \toprule
+    技術名 & 概要 & 採用の理由 \\
+    \midrule
+    \texttt{PUT} / \texttt{DELETE} &
+      資源の更新（\texttt{PUT}）・削除（\texttt{DELETE}）を表す HTTP メソッド &
+      API 設計に沿って操作種別を URL とメソッドで明確に分離するため。 \\
+    \texttt{express.json()} &
+      JSON 形式のリクエストボディを解析して \texttt{req.body} に格納するミドルウェア &
+      クライアント JS の \texttt{fetch} から送信される JSON データを簡潔に受け取るため。 \\
+    \texttt{fetch} API &
+      ブラウザから非同期で HTTP 通信を行う Web 標準 API &
+      画面全体を再読み込みせず絞り込み・再取得・直接編集・削除を即座に反映するため。 \\
+    \texttt{node:sqlite} &
+      Node.js 標準組み込みの同期型 SQLite モジュール（\texttt{DatabaseSync}） &
+      外部 npm パッケージを追加せずにサーバ再起動後もデータを永続化するため。 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\end{document}
