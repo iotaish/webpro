@@ -198,7 +198,8 @@ app.post("/keiyo2/update/:number", (req, res) => {
   res.redirect('/keiyo2');
 });
 
-const dbPath = process.env.TIMETABLE_DB_PATH || path.join(__dirname, "timetable.db");
+const dbPath = process.env.TIMETABLE_DB_PATH || path.join(__dirname, "data", "timetable.db");
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const dbExists = fs.existsSync(dbPath);
 const db = new DatabaseSync(dbPath);
 
@@ -446,7 +447,8 @@ app.post("/classes/delete/:id", (req, res) => {
   res.redirect("/classes");
 });
 
-const backlogDbPath = process.env.BACKLOG_DB_PATH || path.join(__dirname, "backlog.db");
+const backlogDbPath = process.env.BACKLOG_DB_PATH || path.join(__dirname, "data", "backlog.db");
+fs.mkdirSync(path.dirname(backlogDbPath), { recursive: true });
 const backlogDbExists = fs.existsSync(backlogDbPath);
 const backlogDb = new DatabaseSync(backlogDbPath);
 
@@ -736,7 +738,8 @@ app.post("/backlog/delete/:id", (req, res) => {
   res.redirect("/backlog");
 });
 
-const aiAuditDbPath = process.env.AI_AUDIT_DB_PATH || path.join(__dirname, "ai_audit.db");
+const aiAuditDbPath = process.env.AI_AUDIT_DB_PATH || path.join(__dirname, "data", "ai_audit.db");
+fs.mkdirSync(path.dirname(aiAuditDbPath), { recursive: true });
 const aiAuditDbExists = fs.existsSync(aiAuditDbPath);
 const aiAuditDb = new DatabaseSync(aiAuditDbPath);
 
