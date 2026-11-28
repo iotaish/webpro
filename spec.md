@@ -85,7 +85,7 @@
 | --- | --- |
 | 実行ランタイム | Node.js（標準組み込み `node:sqlite` を利用） |
 | モジュール方式 | CommonJS（`package.json` の `"type": "commonjs"`） |
-| 依存パッケージ | `express` (`^4.21.2`), `ejs` (`^3.1.10`) |
+| 依存パッケージ | `express` (`^4.21.2`), `ejs` (`^3.1.10`), `@malloydata/malloy` (`^0.0.437`), `@malloydata/db-duckdb` (`^0.0.437`) |
 | 待ち受けポート | `8080`（`http://localhost:8080`、環境変数 `PORT` で上書き可） |
 
 ### 2.2. 起動・停止手順
@@ -114,7 +114,8 @@
 - **積みゲー・積読リスト（`/backlog`）**:
    - アプリ 1 での永続化方針を踏まえ、当初から `node:sqlite`（`DatabaseSync`）を用いて `data/backlog.db`（環境変数 `BACKLOG_DB_PATH` でパス変更可）の `backlog` テーブルに永続化する。
 - **AIサブスク・API従量コスト監査（`/ai-audit`）**:
-   - `node:sqlite`（`DatabaseSync`）を用いて `data/ai_audit.db`（環境変数 `AI_AUDIT_DB_PATH` でパス変更可）にモデル単価マスタ（`ai_models` テーブル）および監査対象データ（`ai_audits` テーブル）を永続化する。
+   - OLTP（永続化・CRUD）には `node:sqlite`（`DatabaseSync`）を用いて `data/ai_audit.db`（環境変数 `AI_AUDIT_DB_PATH` でパス変更可）にモデル単価マスタ（`ai_models`）および監査対象データ（`ai_audits`）を永続化する。
+   - OLAP（プロバイダ × モデル階級クロス集計）には常駐インメモリ DuckDB（`:memory:`、ディスク非保存）と Malloy（`malloy/ai_audit.malloy`）を用い、更新時は変更 ID のみをバックグラウンドで差分同期する。
 - **既存 DB 非初期化ルール（共通）**:
    - 起動時に `.db` ファイルが**存在しない場合のみ**、テーブルの作成と初期データ（`classes` / `backlog` / `ai_audits` 各 5 件、`ai_models` 6 件）の投入を行う。
    - すでに `.db` ファイルが存在する場合は、レコード件数が 0 件（全件削除済み）であっても再初期化や初期データの再投入を行わず、既存データをそのまま読み込む。
@@ -125,9 +126,11 @@
    - すでに別のプロセスがポート `8080` を使用している場合、起動に失敗する。
    - `lsof -i :8080` で占有プロセスを確認して停止するか、環境変数 `PORT` で別ポートを指定する。
 - **不正な入力による `400 Bad Request`**:
-   - 必須項目の欠落や許容範囲外の値が送信された場合、HTTP ステータス `400` とエラーメッセージを返す。
+   - 必須項目の欠落・重複・許容範囲外の値が送信された場合、HTTP ステータス `400` とエラーメッセージを返す（新規登録時は `views/error.ejs`、更新時は編集画面を再描画）。
 - **存在しない ID へのアクセス（`404 Not Found`）**:
    - 削除済みまたは未登録の ID、あるいは正の整数でない ID が指定された場合、HTML 画面ルートではステータス `404` のテンプレートを返す。
+- **サーバ内部エラー（`500 Internal Server Error`）**:
+   - 予期しない例外発生時は末尾の共通エラーハンドラで捕捉し、`views/error.ejs` を返す。
 
 ---
 
@@ -142,12 +145,14 @@
 ├── spec.md                         # 本仕様書
 ├── data/                           # SQLite データベース保存先（*.db, Git 管理対象外）
 ├── sql/                            # 外部 SQL クエリ定義（-- name: 区切り）
-│   └── <resource>.sql              # 各アプリ用のテーブル定義・CRUD・集計クエリ
+│   └── <resource>.sql              # 各アプリ用のテーブル定義・CRUD・検索クエリ
+├── malloy/                         # OLAP セマンティックモデル定義
+│   └── ai_audit.malloy             # /ai-audit 用クロス集計モデル
 ├── public/                         # 静的ファイル（新規追加フォーム HTML・CSS）
 │   ├── app.css                     # 全アプリ共通スタイルシート
 │   └── <resource>_add.html         # 各アプリの新規追加フォーム
-└── views/                          # EJS テンプレート（SSR 描画・400/404 応答）
-    ├── error.ejs                   # 400 入力エラー共通テンプレート（戻るリンク付き）
+└── views/                          # EJS テンプレート（SSR 描画・400/500/404 応答）
+    ├── error.ejs                   # 400 / 500 共通エラーテンプレート（戻るリンク付き）
     ├── <resource>.ejs              # 一覧画面テンプレート
     ├── <resource>_detail.ejs       # 詳細画面テンプレート
     ├── <resource>_edit.ejs         # 編集画面テンプレート
@@ -161,9 +166,10 @@
    - Express のルート照合順序に依存するため、`GET /:resource/create`、`GET /:resource/edit/:id`、`GET /:resource/delete/:id` を `GET /:resource/:id` より前に定義している。
    - `keiyo2` では `GET /keiyo2/delete/:number` で即時削除していたのに対し、自作アプリでは誤削除防止のため削除確認ページ（`GET /:resource/delete/:id`）を経由して `POST /:resource/delete/:id` で削除する構成としている。
 3. **サーバ側バリデーションと統一 HTTP ステータス**:
-   - 入力値の検証をサーバ側で一元化し、必須項目欠落・型不正・範囲外は `400 Bad Request`（新規登録は `views/error.ejs`、更新は編集画面再描画）、対象 ID 不在は `404 Not Found` を返す。
-4. **SQL の外部管理とプリペアドステートメント**:
+   - 入力値の検証をサーバ側で一元化し、必須項目欠落・型不正・重複・範囲外は `400 Bad Request`（新規登録は `views/error.ejs`、更新は編集画面再描画）、対象 ID 不在は `404 Not Found`、予期しない内部例外は共通エラーハンドラで `500 Internal Server Error`（`views/error.ejs`）を返す。
+4. **SQL の外部管理と OLTP / OLAP 分離**:
    - SQL 文を `sql/*.sql` に外出しし、起動時に `loadSqlQueries()` で読み込んで `db.prepare()` に位置パラメータを渡すことで、JS と SQL の責務分離および SQL インジェクション防止を両立している。
+   - `/ai-audit` のクロス集計は `malloy/ai_audit.malloy` と常駐インメモリ DuckDB に分離し、登録・更新・削除時は変更 ID のみをバックグラウンドで差分同期している。
 
 ### 3.2. システム1：授業・時間割管理（`/classes`）
 
@@ -335,6 +341,7 @@ flowchart LR
 
 - サーバ: `app5.js`（`/ai-audit` 系ルート）
 - SQL: `sql/ai_audit.sql`
+- Malloy: `malloy/ai_audit.malloy`
 - テンプレート: `views/ai_audit.ejs`, `views/ai_audit_detail.ejs`, `views/ai_audit_edit.ejs`, `views/ai_audit_delete.ejs`, `views/error.ejs`
 - 静的ファイル: `public/app.css`, `public/ai_audit_add.html`
 
@@ -365,11 +372,11 @@ flowchart LR
    | `status` | `string`（`TEXT NOT NULL DEFAULT '継続中'`） | 監査ステータス（`継続中` / `要見直し` / `解約候補`） |
    | `memo` | `string`（`TEXT NOT NULL DEFAULT ''`） | メモ（任意、既定値 `""`） |
 
-3. **SQL `JOIN`・月額正規化・クロス集計仕様**:
+3. **正規化・損益計算・Malloy OLAP クロス集計仕様**:
    - **月額換算定額（`monthlySubCostUsd`）**: `billingCycle` が `年額` の場合は `contractFeeUsd / 12.0`、`月額` の場合は `contractFeeUsd`、`従量のみ` の場合は `0.0` として算出する。
-   - **API 理論額（`apiEquivalentUsd`）**: `ai_audits` と `ai_models` を `modelId = ai_models.id` で `JOIN` し、`inputTokensM * inputPricePer1M + outputTokensM * outputPricePer1M` で算出する。
+   - **API 理論額（`apiEquivalentUsd`）**: `ai_audits` と `ai_models` を `modelId = ai_models.id` で結合し、`inputTokensM * inputPricePer1M + outputTokensM * outputPricePer1M` で算出する。
    - **定額 vs API 理論額の損益（`savingsUsd`）**: `apiEquivalentUsd - monthlySubCostUsd` とし、正値は定額プランの割安（元が取れている状態）、負値は API 従量より割高であることを示す。
-   - **プロバイダ × モデル階級クロス集計**: 一覧画面（`GET /ai-audit`）の絞り込み結果に対して `GROUP BY provider, grade` の SQL 集計を実行し、件数・月額定額合計・API 理論額合計・差額合計を表示する。
+   - **プロバイダ × モデル階級クロス集計（Malloy）**: `malloy/ai_audit.malloy`（`cross_summary` ビュー）を用い、常駐インメモリ DuckDB 上で絞り込み結果に対する件数・月額定額合計・API 理論額合計・差額合計を算出する。登録・更新・削除時は変更 ID のみをバックグラウンドで差分同期（`DELETE`＋`INSERT`）する。
 
 #### 3.4.3. ルート仕様
 
@@ -436,4 +443,6 @@ flowchart LR
 | 技術名 | 概要 | 採用の理由 |
 | --- | --- | --- |
 | `node:sqlite`（`DatabaseSync`） | Node.js 標準組み込みの同期型 SQLite データベースモジュール | 追加の外部 npm パッケージやネイティブビルドを不要にしつつ、Node.js 標準機能だけでデータをファイル永続化（`.db`）できるため採用。 |
-| SQL（`sql/*.sql` 外出し・プリペアドステートメント・`JOIN` / `GROUP BY`） | リレーショナル DB に対するクエリ言語。`sql/*.sql` に `-- name:` 区切りで外出しし、`db.prepare()` でパラメータ化して実行する | 授業ではメモリ内配列のみ扱ったが、マスタ結合（`/ai-audit` の `JOIN`）やクロス集計（`GROUP BY`）、SQL インジェクション対策、および JS コードからの SQL 文字列分離による保守性向上のため採用。 |
+| SQL（`sql/*.sql` 外出し・プリペアドステートメント・`JOIN`） | リレーショナル DB に対するクエリ言語。`sql/*.sql` に `-- name:` 区切りで外出しし、`db.prepare()` でパラメータ化して実行する | 授業ではメモリ内配列のみ扱ったが、マスタ結合（`/ai-audit` の `JOIN`）や SQL インジェクション対策、および JS コードからの SQL 文字列分離による保守性向上のため採用。 |
+| Malloy（`malloy/*.malloy` による OLAP 集計） | リレーション・計算ディメンション・メジャーを宣言的に記述し、バックエンド上で集計を実行する OLAP／セマンティッククエリ言語 | `/ai-audit` のプロバイダ × モデル階級クロス集計を SQL 手書きから切り離し、OLTP と OLAP の責務を明確に分離するため採用。 |
+| DuckDB（`@malloydata/db-duckdb`） | 列指向・ベクトル化実行エンジンを備えた組み込み型 OLAP データベース（今回は `:memory:` で使用） | Malloy の実行バックエンドとして、ディスク保存を行わずに高速な多次元集計（OLAP）をプロセス内で完結させるため採用。 |
