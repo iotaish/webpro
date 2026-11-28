@@ -2,7 +2,6 @@
 
 - **ソースコードリポジトリ**: https://github.com/iotaish/webpro
 - **対象サーバファイル**: `app5.js`
-- **技術スタック**: Node.js / Express / EJS / HTML Form / SQLite (`node:sqlite`)
 
 ## 対象アプリケーション一覧
 
