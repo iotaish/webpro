@@ -197,10 +197,24 @@ app.post("/keiyo2/update/:number", (req, res) => {
   res.redirect('/keiyo2');
 });
 
-const dbPath = process.env.TIMETABLE_DB_PATH || path.join(__dirname, "data", "timetable.db");
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-const dbExists = fs.existsSync(dbPath);
-const db = new DatabaseSync(dbPath);
+function openSqliteDb(envKey, defaultFilename) {
+  const filePath = process.env[envKey] || path.join(__dirname, "data", defaultFilename);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const exists = fs.existsSync(filePath);
+  const database = new DatabaseSync(filePath);
+  return { db: database, exists };
+}
+
+function parsePositiveIntId(raw) {
+  const id = Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function renderBadRequest(res, error, backUrl, listUrl) {
+  return res.status(400).render("error", { error, backUrl, listUrl });
+}
+
+const { db, exists: dbExists } = openSqliteDb("TIMETABLE_DB_PATH", "timetable.db");
 
 const INITIAL_CLASSES = [
   {
@@ -295,9 +309,11 @@ if (!dbExists) {
 const ALLOWED_CLASS_DAYS = ["月", "火", "水", "木", "金", "土"];
 const CLASS_COLUMNS = "id, course, day, period, room, teacher, credits, memo";
 
-function parsePositiveIntId(raw) {
-  const id = Number(raw);
-  return Number.isInteger(id) && id > 0 ? id : null;
+function findClassById(rawId) {
+  const id = parsePositiveIntId(rawId);
+  return id
+    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
+    : null;
 }
 
 function parseClassPayload(body) {
@@ -367,10 +383,7 @@ app.get("/classes/create", (req, res) => {
 });
 
 app.get("/classes/edit/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
-    : null;
+  const detail = findClassById(req.params.id);
   if (!detail) {
     return res.status(404).render("classes_edit", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS, error: null });
   }
@@ -378,10 +391,7 @@ app.get("/classes/edit/:id", (req, res) => {
 });
 
 app.get("/classes/delete/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
-    : null;
+  const detail = findClassById(req.params.id);
   if (!detail) {
     return res.status(404).render("classes_delete", { data: null, id: req.params.id });
   }
@@ -389,10 +399,7 @@ app.get("/classes/delete/:id", (req, res) => {
 });
 
 app.get("/classes/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
-    : null;
+  const detail = findClassById(req.params.id);
   if (!detail) {
     return res.status(404).render("classes_detail", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS });
   }
@@ -402,7 +409,7 @@ app.get("/classes/:id", (req, res) => {
 app.post("/classes", (req, res) => {
   const parsed = parseClassPayload(req.body);
   if (parsed.error) {
-    return res.status(400).send(parsed.error);
+    return renderBadRequest(res, parsed.error, "/classes/create", "/classes");
   }
   const v = parsed.value;
   db.prepare(
@@ -412,17 +419,14 @@ app.post("/classes", (req, res) => {
 });
 
 app.post("/classes/update/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const target = id
-    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
-    : null;
+  const target = findClassById(req.params.id);
   if (!target) {
     return res.status(404).render("classes_edit", { data: null, id: req.params.id, days: ALLOWED_CLASS_DAYS, error: null });
   }
   const parsed = parseClassPayload(req.body);
   if (parsed.error) {
     return res.status(400).render("classes_edit", {
-      data: { id, ...req.body },
+      data: { id: target.id, ...req.body },
       days: ALLOWED_CLASS_DAYS,
       error: parsed.error
     });
@@ -430,26 +434,27 @@ app.post("/classes/update/:id", (req, res) => {
   const v = parsed.value;
   db.prepare(
     "UPDATE classes SET course = ?, day = ?, period = ?, room = ?, teacher = ?, credits = ?, memo = ? WHERE id = ?"
-  ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, id);
-  res.redirect(`/classes/${id}`);
+  ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, target.id);
+  res.redirect(`/classes/${target.id}`);
 });
 
 app.post("/classes/delete/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const target = id
-    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
-    : null;
+  const target = findClassById(req.params.id);
   if (!target) {
     return res.status(404).render("classes_delete", { data: null, id: req.params.id });
   }
-  db.prepare("DELETE FROM classes WHERE id = ?").run(id);
+  db.prepare("DELETE FROM classes WHERE id = ?").run(target.id);
   res.redirect("/classes");
 });
 
-const backlogDbPath = process.env.BACKLOG_DB_PATH || path.join(__dirname, "data", "backlog.db");
-fs.mkdirSync(path.dirname(backlogDbPath), { recursive: true });
-const backlogDbExists = fs.existsSync(backlogDbPath);
-const backlogDb = new DatabaseSync(backlogDbPath);
+const { db: backlogDb, exists: backlogDbExists } = openSqliteDb("BACKLOG_DB_PATH", "backlog.db");
+
+function findBacklogById(rawId) {
+  const id = parsePositiveIntId(rawId);
+  return id
+    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
+    : null;
+}
 
 const INITIAL_BACKLOG = [
   {
@@ -631,10 +636,7 @@ app.get("/backlog/create", (req, res) => {
 });
 
 app.get("/backlog/edit/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
-    : null;
+  const detail = findBacklogById(req.params.id);
   if (!detail) {
     return res.status(404).render("backlog_edit", {
       data: null,
@@ -653,10 +655,7 @@ app.get("/backlog/edit/:id", (req, res) => {
 });
 
 app.get("/backlog/delete/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
-    : null;
+  const detail = findBacklogById(req.params.id);
   if (!detail) {
     return res.status(404).render("backlog_delete", { data: null, id: req.params.id });
   }
@@ -664,10 +663,7 @@ app.get("/backlog/delete/:id", (req, res) => {
 });
 
 app.get("/backlog/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const detail = id
-    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
-    : null;
+  const detail = findBacklogById(req.params.id);
   if (!detail) {
     return res.status(404).render("backlog_detail", {
       data: null,
@@ -686,7 +682,7 @@ app.get("/backlog/:id", (req, res) => {
 app.post("/backlog", (req, res) => {
   const parsed = parseBacklogPayload(req.body);
   if (parsed.error) {
-    return res.status(400).send(parsed.error);
+    return renderBadRequest(res, parsed.error, "/backlog/create", "/backlog");
   }
   const v = parsed.value;
   backlogDb.prepare(
@@ -696,10 +692,7 @@ app.post("/backlog", (req, res) => {
 });
 
 app.post("/backlog/update/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const target = id
-    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
-    : null;
+  const target = findBacklogById(req.params.id);
   if (!target) {
     return res.status(404).render("backlog_edit", {
       data: null,
@@ -712,7 +705,7 @@ app.post("/backlog/update/:id", (req, res) => {
   const parsed = parseBacklogPayload(req.body);
   if (parsed.error) {
     return res.status(400).render("backlog_edit", {
-      data: { id, ...req.body },
+      data: { id: target.id, ...req.body },
       types: ALLOWED_BACKLOG_TYPES,
       statuses: ALLOWED_BACKLOG_STATUSES,
       error: parsed.error
@@ -721,26 +714,20 @@ app.post("/backlog/update/:id", (req, res) => {
   const v = parsed.value;
   backlogDb.prepare(
     "UPDATE backlog SET title = ?, type = ?, platform = ?, yearsStacked = ?, estimatedHours = ?, status = ?, memo = ? WHERE id = ?"
-  ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, id);
-  res.redirect(`/backlog/${id}`);
+  ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, target.id);
+  res.redirect(`/backlog/${target.id}`);
 });
 
 app.post("/backlog/delete/:id", (req, res) => {
-  const id = parsePositiveIntId(req.params.id);
-  const target = id
-    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
-    : null;
+  const target = findBacklogById(req.params.id);
   if (!target) {
     return res.status(404).render("backlog_delete", { data: null, id: req.params.id });
   }
-  backlogDb.prepare("DELETE FROM backlog WHERE id = ?").run(id);
+  backlogDb.prepare("DELETE FROM backlog WHERE id = ?").run(target.id);
   res.redirect("/backlog");
 });
 
-const aiAuditDbPath = process.env.AI_AUDIT_DB_PATH || path.join(__dirname, "data", "ai_audit.db");
-fs.mkdirSync(path.dirname(aiAuditDbPath), { recursive: true });
-const aiAuditDbExists = fs.existsSync(aiAuditDbPath);
-const aiAuditDb = new DatabaseSync(aiAuditDbPath);
+const { db: aiAuditDb, exists: aiAuditDbExists } = openSqliteDb("AI_AUDIT_DB_PATH", "ai_audit.db");
 
 const INITIAL_AI_MODELS = [
   { provider: "OpenAI", modelName: "GPT-5.2", grade: "Frontier", inputPricePer1M: 1.75, outputPricePer1M: 14.0 },
@@ -1072,7 +1059,7 @@ app.get("/ai-audit/:id", (req, res) => {
 app.post("/ai-audit", (req, res) => {
   const parsed = parseAiAuditPayload(req.body);
   if (parsed.error) {
-    return res.status(400).send(parsed.error);
+    return renderBadRequest(res, parsed.error, "/ai-audit/create", "/ai-audit");
   }
   const v = parsed.value;
   aiAuditDb.prepare(
