@@ -76,22 +76,6 @@ WHERE (? = '' OR m.grade = ?)
   AND (? = '' OR LOWER(a.serviceName) LIKE ? OR LOWER(m.modelName) LIKE ? OR LOWER(m.provider) LIKE ? OR LOWER(a.memo) LIKE ?)
 ORDER BY a.id ASC;
 
--- name: crossSummary
-SELECT
-  m.provider,
-  m.grade,
-  COUNT(*) AS itemCount,
-  ROUND(SUM(CASE WHEN a.billingCycle = '年額' THEN a.contractFeeUsd / 12.0 WHEN a.billingCycle = '月額' THEN a.contractFeeUsd ELSE 0.0 END), 2) AS totalSubUsd,
-  ROUND(SUM(a.inputTokensM * m.inputPricePer1M + a.outputTokensM * m.outputPricePer1M), 2) AS totalApiUsd,
-  ROUND(SUM((a.inputTokensM * m.inputPricePer1M + a.outputTokensM * m.outputPricePer1M) - (CASE WHEN a.billingCycle = '年額' THEN a.contractFeeUsd / 12.0 WHEN a.billingCycle = '月額' THEN a.contractFeeUsd ELSE 0.0 END)), 2) AS totalSavingsUsd
-FROM ai_audits a
-JOIN ai_models m ON a.modelId = m.id
-WHERE (? = '' OR m.grade = ?)
-  AND (? = '' OR a.status = ?)
-  AND (? = '' OR LOWER(a.serviceName) LIKE ? OR LOWER(m.modelName) LIKE ? OR LOWER(m.provider) LIKE ? OR LOWER(a.memo) LIKE ?)
-GROUP BY m.provider, m.grade
-ORDER BY m.provider ASC, CASE m.grade WHEN 'Frontier' THEN 1 WHEN 'Standard' THEN 2 ELSE 3 END ASC;
-
 -- name: findById
 SELECT
   a.id,
