@@ -110,12 +110,12 @@
 
 - **変更の経緯**: 初期実装ではメモリ内配列で管理していたが、サーバ再起動時に登録・編集・削除内容が失われるため、ファイルベースの永続化（SQLite）へ仕様変更した。
 - **授業・時間割管理（`/classes`）**:
-   - `node:sqlite`（`DatabaseSync`）を用いて `timetable.db`（環境変数 `TIMETABLE_DB_PATH` でパス変更可）の `classes` テーブルに永続化する。
+   - `node:sqlite`（`DatabaseSync`）を用いて `data/timetable.db`（環境変数 `TIMETABLE_DB_PATH` でパス変更可）の `classes` テーブルに永続化する。
    - 旧スキーマ（`teacher` / `credits` / `memo` 列なし）の既存 DB を読み込んだ場合は、`ALTER TABLE ... ADD COLUMN` により安全に列を拡張する。
 - **積みゲー・積読リスト（`/backlog`）**:
-   - アプリ 1 での永続化方針を踏まえ、当初から `node:sqlite`（`DatabaseSync`）を用いて `backlog.db`（環境変数 `BACKLOG_DB_PATH` でパス変更可）の `backlog` テーブルに永続化する。
+   - アプリ 1 での永続化方針を踏まえ、当初から `node:sqlite`（`DatabaseSync`）を用いて `data/backlog.db`（環境変数 `BACKLOG_DB_PATH` でパス変更可）の `backlog` テーブルに永続化する。
 - **AIサブスク・API従量コスト監査（`/ai-audit`）**:
-   - `node:sqlite`（`DatabaseSync`）を用いて `ai_audit.db`（環境変数 `AI_AUDIT_DB_PATH` でパス変更可）にモデル単価マスタ（`ai_models` テーブル）および監査対象データ（`ai_audits` テーブル）を永続化する。
+   - `node:sqlite`（`DatabaseSync`）を用いて `data/ai_audit.db`（環境変数 `AI_AUDIT_DB_PATH` でパス変更可）にモデル単価マスタ（`ai_models` テーブル）および監査対象データ（`ai_audits` テーブル）を永続化する。
 - **既存 DB 非初期化ルール（共通）**:
    - 起動時に `.db` ファイルが**存在しない場合のみ**、テーブルの作成と初期データ（`classes` / `backlog` / `ai_audits` 各 5 件、`ai_models` 6 件）の投入を行う。
    - すでに `.db` ファイルが存在する場合は、レコード件数が 0 件（全件削除済み）であっても再初期化や初期データの再投入を行わず、既存データをそのまま読み込む。
@@ -143,6 +143,7 @@
 ├── app5.js                         # メインサーバ（EJS SSR ルーティング・フォーム処理）
 ├── package.json                    # 依存パッケージおよび起動スクリプト（npm start）
 ├── spec.md                         # 本仕様書
+├── data/                           # SQLite データベース保存先（*.db, Git 管理対象外）
 ├── public/                         # 静的ファイル（新規追加フォーム HTML・CSS）
 │   ├── app.css                     # 全アプリ共通スタイルシート
 │   └── <resource>_add.html         # 各アプリの新規追加フォーム
