@@ -7,8 +7,13 @@ CREATE TABLE backlog (
   yearsStacked INTEGER NOT NULL DEFAULT 0,
   estimatedHours INTEGER NOT NULL DEFAULT 10,
   status TEXT NOT NULL DEFAULT '未着手',
-  memo TEXT NOT NULL DEFAULT ''
+  memo TEXT NOT NULL DEFAULT '',
+  UNIQUE(title, type, platform)
 );
+
+-- name: ensureUniqueIndex
+CREATE UNIQUE INDEX IF NOT EXISTS idx_backlog_unique
+ON backlog (title, type, platform);
 
 -- name: tableInfo
 PRAGMA table_info(backlog);

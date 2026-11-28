@@ -237,6 +237,10 @@ function renderBadRequest(res, error, backUrl, listUrl) {
   return res.status(400).render("error", { error, backUrl, listUrl });
 }
 
+function isUniqueConstraintError(err) {
+  return Boolean(err && String(err.message).includes("UNIQUE constraint failed"));
+}
+
 const { db, exists: dbExists } = openSqliteDb("TIMETABLE_DB_PATH", "timetable.db");
 
 const INITIAL_CLASSES = [
@@ -315,6 +319,9 @@ if (!dbExists) {
     if (!existingCols.has("memo")) {
       db.exec(CLASS_SQL.addMemoColumn);
     }
+    try {
+      db.exec(CLASS_SQL.ensureUniqueIndex);
+    } catch {}
   }
 }
 
@@ -411,9 +418,16 @@ app.post("/classes", (req, res) => {
     return renderBadRequest(res, parsed.error, "/classes/create", "/classes");
   }
   const v = parsed.value;
-  db.prepare(CLASS_SQL.insert).run(
-    v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo
-  );
+  try {
+    db.prepare(CLASS_SQL.insert).run(
+      v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo
+    );
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return renderBadRequest(res, "同じ科目名・曜日・時限・教室の授業がすでに登録されています。", "/classes/create", "/classes");
+    }
+    throw err;
+  }
   res.redirect("/classes");
 });
 
@@ -431,9 +445,20 @@ app.post("/classes/update/:id", (req, res) => {
     });
   }
   const v = parsed.value;
-  db.prepare(CLASS_SQL.update).run(
-    v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, target.id
-  );
+  try {
+    db.prepare(CLASS_SQL.update).run(
+      v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, target.id
+    );
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return res.status(400).render("classes_edit", {
+        data: { id: target.id, ...req.body },
+        days: ALLOWED_CLASS_DAYS,
+        error: "同じ科目名・曜日・時限・教室の授業がすでに登録されています。"
+      });
+    }
+    throw err;
+  }
   res.redirect(`/classes/${target.id}`);
 });
 
@@ -525,6 +550,10 @@ if (!backlogDbExists) {
   const existingCols = backlogDb.prepare(BACKLOG_SQL.tableInfo).all();
   if (existingCols.length === 0) {
     createBacklogTable(backlogDb);
+  } else {
+    try {
+      backlogDb.exec(BACKLOG_SQL.ensureUniqueIndex);
+    } catch {}
   }
 }
 
@@ -657,9 +686,16 @@ app.post("/backlog", (req, res) => {
     return renderBadRequest(res, parsed.error, "/backlog/create", "/backlog");
   }
   const v = parsed.value;
-  backlogDb.prepare(BACKLOG_SQL.insert).run(
-    v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo
-  );
+  try {
+    backlogDb.prepare(BACKLOG_SQL.insert).run(
+      v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo
+    );
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return renderBadRequest(res, "同じタイトル・種別・媒体のアイテムがすでに登録されています。", "/backlog/create", "/backlog");
+    }
+    throw err;
+  }
   res.redirect("/backlog");
 });
 
@@ -684,9 +720,21 @@ app.post("/backlog/update/:id", (req, res) => {
     });
   }
   const v = parsed.value;
-  backlogDb.prepare(BACKLOG_SQL.update).run(
-    v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, target.id
-  );
+  try {
+    backlogDb.prepare(BACKLOG_SQL.update).run(
+      v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, target.id
+    );
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return res.status(400).render("backlog_edit", {
+        data: { id: target.id, ...req.body },
+        types: ALLOWED_BACKLOG_TYPES,
+        statuses: ALLOWED_BACKLOG_STATUSES,
+        error: "同じタイトル・種別・媒体のアイテムがすでに登録されています。"
+      });
+    }
+    throw err;
+  }
   res.redirect(`/backlog/${target.id}`);
 });
 
@@ -793,6 +841,10 @@ if (!aiAuditDbExists) {
   const existingAudits = aiAuditDb.prepare(AI_AUDIT_SQL.auditsTableInfo).all();
   if (existingModels.length === 0 || existingAudits.length === 0) {
     createAiAuditTables(aiAuditDb);
+  } else {
+    try {
+      aiAuditDb.exec(AI_AUDIT_SQL.ensureUniqueIndex);
+    } catch {}
   }
 }
 
@@ -956,9 +1008,16 @@ app.post("/ai-audit", (req, res) => {
     return renderBadRequest(res, parsed.error, "/ai-audit/create", "/ai-audit");
   }
   const v = parsed.value;
-  aiAuditDb.prepare(AI_AUDIT_SQL.insertAudit).run(
-    v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo
-  );
+  try {
+    aiAuditDb.prepare(AI_AUDIT_SQL.insertAudit).run(
+      v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo
+    );
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return renderBadRequest(res, "同じサービス・利用モデル・契約周期の監査データがすでに登録されています。", "/ai-audit/create", "/ai-audit");
+    }
+    throw err;
+  }
   res.redirect("/ai-audit");
 });
 
@@ -986,9 +1045,22 @@ app.post("/ai-audit/update/:id", (req, res) => {
     });
   }
   const v = parsed.value;
-  aiAuditDb.prepare(AI_AUDIT_SQL.update).run(
-    v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo, target.id
-  );
+  try {
+    aiAuditDb.prepare(AI_AUDIT_SQL.update).run(
+      v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo, target.id
+    );
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      return res.status(400).render("ai_audit_edit", {
+        data: { id: target.id, ...req.body },
+        models,
+        billingCycles: ALLOWED_AI_BILLING_CYCLES,
+        statuses: ALLOWED_AI_STATUSES,
+        error: "同じサービス・利用モデル・契約周期の監査データがすでに登録されています。"
+      });
+    }
+    throw err;
+  }
   res.redirect(`/ai-audit/${target.id}`);
 });
 
