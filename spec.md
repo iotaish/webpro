@@ -144,10 +144,13 @@
 ├── package.json                    # 依存パッケージおよび起動スクリプト（npm start）
 ├── spec.md                         # 本仕様書
 ├── data/                           # SQLite データベース保存先（*.db, Git 管理対象外）
+├── sql/                            # 外部 SQL クエリ定義（-- name: 区切り）
+│   └── <resource>.sql              # 各アプリ用のテーブル定義・CRUD・集計クエリ
 ├── public/                         # 静的ファイル（新規追加フォーム HTML・CSS）
 │   ├── app.css                     # 全アプリ共通スタイルシート
 │   └── <resource>_add.html         # 各アプリの新規追加フォーム
-└── views/                          # EJS テンプレート（SSR 描画・404 応答）
+└── views/                          # EJS テンプレート（SSR 描画・400/404 応答）
+    ├── error.ejs                   # 400 入力エラー共通テンプレート（戻るリンク付き）
     ├── <resource>.ejs              # 一覧画面テンプレート
     ├── <resource>_detail.ejs       # 詳細画面テンプレート
     ├── <resource>_edit.ejs         # 編集画面テンプレート
@@ -161,14 +164,17 @@
    - Express のルート照合順序に依存するため、`GET /:resource/create`、`GET /:resource/edit/:id`、`GET /:resource/delete/:id` を `GET /:resource/:id` より前に定義している。
    - `keiyo2` では `GET /keiyo2/delete/:number` で即時削除していたのに対し、自作アプリでは誤削除防止のため削除確認ページ（`GET /:resource/delete/:id`）を経由して `POST /:resource/delete/:id` で削除する構成としている。
 3. **サーバ側バリデーションと統一 HTTP ステータス**:
-   - 入力値の検証をサーバ側で一元化し、必須項目欠落・型不正・範囲外は `400 Bad Request`、対象 ID 不在は `404 Not Found` を返す。
+   - 入力値の検証をサーバ側で一元化し、必須項目欠落・型不正・範囲外は `400 Bad Request`（新規登録は `views/error.ejs`、更新は編集画面再描画）、対象 ID 不在は `404 Not Found` を返す。
+4. **SQL の外部管理とプリペアドステートメント**:
+   - SQL 文を `sql/*.sql` に外出しし、起動時に `loadSqlQueries()` で読み込んで `db.prepare()` に位置パラメータを渡すことで、JS と SQL の責務分離および SQL インジェクション防止を両立している。
 
 ### 3.2. システム1：授業・時間割管理（`/classes`）
 
 #### 3.2.1. 関連ファイル
 
 - サーバ: `app5.js`（`/classes` 系ルート）
-- テンプレート: `views/classes.ejs`, `views/classes_detail.ejs`, `views/classes_edit.ejs`, `views/classes_delete.ejs`
+- SQL: `sql/classes.sql`
+- テンプレート: `views/classes.ejs`, `views/classes_detail.ejs`, `views/classes_edit.ejs`, `views/classes_delete.ejs`, `views/error.ejs`
 - 静的ファイル: `public/app.css`, `public/classes_add.html`
 
 #### 3.2.2. データモデル（`ClassItem` / `classes` テーブル）
@@ -249,7 +255,8 @@ flowchart LR
 #### 3.3.1. 関連ファイル
 
 - サーバ: `app5.js`（`/backlog` 系ルート）
-- テンプレート: `views/backlog.ejs`, `views/backlog_detail.ejs`, `views/backlog_edit.ejs`, `views/backlog_delete.ejs`
+- SQL: `sql/backlog.sql`
+- テンプレート: `views/backlog.ejs`, `views/backlog_detail.ejs`, `views/backlog_edit.ejs`, `views/backlog_delete.ejs`, `views/error.ejs`
 - 静的ファイル: `public/app.css`, `public/backlog_add.html`
 
 #### 3.3.2. データモデル（`BacklogItem` / `backlog` テーブル）
@@ -330,7 +337,8 @@ flowchart LR
 #### 3.4.1. 関連ファイル
 
 - サーバ: `app5.js`（`/ai-audit` 系ルート）
-- テンプレート: `views/ai_audit.ejs`, `views/ai_audit_detail.ejs`, `views/ai_audit_edit.ejs`, `views/ai_audit_delete.ejs`
+- SQL: `sql/ai_audit.sql`
+- テンプレート: `views/ai_audit.ejs`, `views/ai_audit_detail.ejs`, `views/ai_audit_edit.ejs`, `views/ai_audit_delete.ejs`, `views/error.ejs`
 - 静的ファイル: `public/app.css`, `public/ai_audit_add.html`
 
 #### 3.4.2. データモデル（`ai_models` マスタ / `ai_audits` テーブル）
@@ -431,3 +439,4 @@ flowchart LR
 | 技術名 | 概要 | 採用の理由 |
 | --- | --- | --- |
 | `node:sqlite`（`DatabaseSync`） | Node.js 標準組み込みの同期型 SQLite データベースモジュール | 追加の外部 npm パッケージやネイティブビルドを不要にしつつ、Node.js 標準機能だけでデータをファイル永続化（`.db`）できるため採用。 |
+| SQL（`sql/*.sql` 外出し・プリペアドステートメント・`JOIN` / `GROUP BY`） | リレーショナル DB に対するクエリ言語。`sql/*.sql` に `-- name:` 区切りで外出しし、`db.prepare()` でパラメータ化して実行する | 授業ではメモリ内配列のみ扱ったが、マスタ結合（`/ai-audit` の `JOIN`）やクロス集計（`GROUP BY`）、SQL インジェクション対策、および JS コードからの SQL 文字列分離による保守性向上のため採用。 |
