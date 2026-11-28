@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>入力エラー</title>
+  <link rel="stylesheet" href="/public/app.css">
+</head>
+<body>
+  <h2>入力エラー</h2>
+  <div class="status-message error" role="alert"><%= error %></div>
+  <div class="actions">
+    <a href="<%= backUrl %>" class="btn btn-primary">入力画面に戻る</a>
+    <a href="<%= listUrl %>" class="btn">一覧に戻る</a>
+  </div>
+</body>
+</html>
