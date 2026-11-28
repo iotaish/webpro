@@ -7,8 +7,13 @@ CREATE TABLE classes (
   room TEXT NOT NULL,
   teacher TEXT NOT NULL DEFAULT '',
   credits INTEGER NOT NULL DEFAULT 2,
-  memo TEXT NOT NULL DEFAULT ''
+  memo TEXT NOT NULL DEFAULT '',
+  UNIQUE(course, day, period, room)
 );
+
+-- name: ensureUniqueIndex
+CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_unique
+ON classes (course, day, period, room);
 
 -- name: tableInfo
 PRAGMA table_info(classes);

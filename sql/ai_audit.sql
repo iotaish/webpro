@@ -18,8 +18,13 @@ CREATE TABLE IF NOT EXISTS ai_audits (
   outputTokensM REAL NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT '継続中',
   memo TEXT NOT NULL DEFAULT '',
-  FOREIGN KEY (modelId) REFERENCES ai_models(id)
+  FOREIGN KEY (modelId) REFERENCES ai_models(id),
+  UNIQUE(serviceName, modelId, billingCycle)
 );
+
+-- name: ensureUniqueIndex
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_audits_unique
+ON ai_audits (serviceName, modelId, billingCycle);
 
 -- name: modelsTableInfo
 PRAGMA table_info(ai_models);
