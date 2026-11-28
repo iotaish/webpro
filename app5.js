@@ -2,6 +2,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
+const { SingleConnectionRuntime } = require("@malloydata/malloy");
+const { DuckDBConnection } = require("@malloydata/db-duckdb");
 const express = require("express");
 const app = express();
 
@@ -944,20 +946,152 @@ function parseAiAuditPayload(body) {
   };
 }
 
-app.get("/ai-audit", (req, res) => {
-  const { gradeFilter, statusFilter, rawQ, filterParams } = buildAiAuditFilter(req.query);
-  const rows = aiAuditDb.prepare(AI_AUDIT_SQL.list).all(...filterParams);
-  const crossSummary = aiAuditDb.prepare(AI_AUDIT_SQL.crossSummary).all(...filterParams);
+const AI_AUDIT_MALLOY = fs.readFileSync(path.join(__dirname, "malloy", "ai_audit.malloy"), "utf8");
+const AI_GRADE_ORDER = { Frontier: 1, Standard: 2, Mini: 3 };
 
-  res.render("ai_audit", {
-    data: rows,
-    crossSummary,
-    grades: ALLOWED_AI_GRADES,
-    statuses: ALLOWED_AI_STATUSES,
-    grade: gradeFilter,
-    status: statusFilter,
-    q: rawQ
+let olapConn = null;
+let olapRuntime = null;
+let olapDirty = true;
+let olapSyncAll = true;
+let olapSyncPromise = null;
+const pendingAuditSyncIds = new Set();
+
+function escapeDuckLiteral(value) {
+  return `'${String(value ?? "").replace(/'/g, "''")}'`;
+}
+
+function escapeMalloyLiteral(value) {
+  return `'${String(value ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+function buildDuckAuditInsertSql(a) {
+  return `INSERT INTO ai_audits VALUES (${Number(a.id)}, ${escapeDuckLiteral(a.serviceName)}, ${Number(a.modelId)}, ${escapeDuckLiteral(a.billingCycle)}, ${Number(a.contractFeeUsd)}, ${Number(a.inputTokensM)}, ${Number(a.outputTokensM)}, ${escapeDuckLiteral(a.status)}, ${escapeDuckLiteral(a.memo)})`;
+}
+
+async function syncAiAuditOlapNow() {
+  if (!olapConn) {
+    olapConn = new DuckDBConnection({ name: "duckdb", databasePath: ":memory:" });
+    olapRuntime = new SingleConnectionRuntime({ connection: olapConn });
+    olapSyncAll = true;
+  }
+
+  if (olapSyncAll) {
+    const ids = Array.from(pendingAuditSyncIds);
+    const models = listAiModels();
+    const audits = aiAuditDb.prepare(AI_AUDIT_SQL.list).all("", "", "", "", "", "%%", "%%", "%%", "%%");
+
+    await olapConn.runSQL(
+      "CREATE OR REPLACE TABLE ai_models (id INTEGER, provider VARCHAR, modelName VARCHAR, grade VARCHAR, inputPricePer1M DOUBLE, outputPricePer1M DOUBLE)"
+    );
+    await olapConn.runSQL(
+      "CREATE OR REPLACE TABLE ai_audits (id INTEGER, serviceName VARCHAR, modelId INTEGER, billingCycle VARCHAR, contractFeeUsd DOUBLE, inputTokensM DOUBLE, outputTokensM DOUBLE, status VARCHAR, memo VARCHAR)"
+    );
+    for (const m of models) {
+      await olapConn.runSQL(
+        `INSERT INTO ai_models VALUES (${Number(m.id)}, ${escapeDuckLiteral(m.provider)}, ${escapeDuckLiteral(m.modelName)}, ${escapeDuckLiteral(m.grade)}, ${Number(m.inputPricePer1M)}, ${Number(m.outputPricePer1M)})`
+      );
+    }
+    for (const a of audits) {
+      await olapConn.runSQL(buildDuckAuditInsertSql(a));
+    }
+    olapSyncAll = false;
+    for (const id of ids) {
+      pendingAuditSyncIds.delete(id);
+    }
+  } else if (pendingAuditSyncIds.size > 0) {
+    const ids = Array.from(pendingAuditSyncIds);
+    await olapConn.runSQL(`DELETE FROM ai_audits WHERE id IN (${ids.join(", ")})`);
+    for (const id of ids) {
+      const row = findAiAuditById(id);
+      if (row) {
+        await olapConn.runSQL(buildDuckAuditInsertSql(row));
+      }
+    }
+    for (const id of ids) {
+      pendingAuditSyncIds.delete(id);
+    }
+  }
+
+  olapDirty = olapSyncAll || pendingAuditSyncIds.size > 0;
+}
+
+function scheduleAiAuditOlapSync() {
+  if (olapSyncPromise) {
+    return olapSyncPromise;
+  }
+  olapSyncPromise = (async () => {
+    while (olapDirty) {
+      await syncAiAuditOlapNow();
+    }
+  })().finally(() => {
+    olapSyncPromise = null;
   });
+  return olapSyncPromise;
+}
+
+function invalidateAiAuditOlapCache(changedId) {
+  if (changedId) {
+    pendingAuditSyncIds.add(Number(changedId));
+  } else {
+    olapSyncAll = true;
+  }
+  olapDirty = true;
+  scheduleAiAuditOlapSync().catch((err) => {
+    console.error("Background OLAP sync failed:", err);
+  });
+}
+
+async function runAiAuditCrossSummary({ gradeFilter, statusFilter, rawQ }, hasRows) {
+  if (!hasRows) {
+    return [];
+  }
+  await scheduleAiAuditOlapSync();
+  const clauses = [];
+  if (gradeFilter) {
+    clauses.push(`ai_models.grade = ${escapeMalloyLiteral(gradeFilter)}`);
+  }
+  if (statusFilter) {
+    clauses.push(`status = ${escapeMalloyLiteral(statusFilter)}`);
+  }
+  if (rawQ) {
+    const likePattern = escapeMalloyLiteral(`%${rawQ.toLowerCase()}%`);
+    clauses.push(
+      `(lower(serviceName) ~ ${likePattern} or lower(ai_models.modelName) ~ ${likePattern} or lower(ai_models.provider) ~ ${likePattern} or lower(memo) ~ ${likePattern})`
+    );
+  }
+  const query = clauses.length > 0
+    ? `run: ai_audits -> { where: ${clauses.join(" and ")} } + cross_summary`
+    : "run: ai_audits -> cross_summary";
+  const result = await olapRuntime
+    .loadModel(AI_AUDIT_MALLOY)
+    .loadQuery(query)
+    .run();
+  return result.data.toObject().sort((a, b) => {
+    if (a.provider !== b.provider) return String(a.provider).localeCompare(String(b.provider));
+    return (AI_GRADE_ORDER[a.grade] || 99) - (AI_GRADE_ORDER[b.grade] || 99);
+  });
+}
+
+invalidateAiAuditOlapCache();
+
+app.get("/ai-audit", async (req, res, next) => {
+  try {
+    const { gradeFilter, statusFilter, rawQ, filterParams } = buildAiAuditFilter(req.query);
+    const rows = aiAuditDb.prepare(AI_AUDIT_SQL.list).all(...filterParams);
+    const crossSummary = await runAiAuditCrossSummary({ gradeFilter, statusFilter, rawQ }, rows.length > 0);
+
+    res.render("ai_audit", {
+      data: rows,
+      crossSummary,
+      grades: ALLOWED_AI_GRADES,
+      statuses: ALLOWED_AI_STATUSES,
+      grade: gradeFilter,
+      status: statusFilter,
+      q: rawQ
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.get("/ai-audit/create", (req, res) => {
@@ -1008,16 +1142,19 @@ app.post("/ai-audit", (req, res) => {
     return renderBadRequest(res, parsed.error, "/ai-audit/create", "/ai-audit");
   }
   const v = parsed.value;
+  let insertedId = null;
   try {
-    aiAuditDb.prepare(AI_AUDIT_SQL.insertAudit).run(
+    const result = aiAuditDb.prepare(AI_AUDIT_SQL.insertAudit).run(
       v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo
     );
+    insertedId = Number(result.lastInsertRowid);
   } catch (err) {
     if (isUniqueConstraintError(err)) {
       return renderBadRequest(res, "同じサービス・利用モデル・契約周期の監査データがすでに登録されています。", "/ai-audit/create", "/ai-audit");
     }
     throw err;
   }
+  invalidateAiAuditOlapCache(insertedId);
   res.redirect("/ai-audit");
 });
 
@@ -1061,6 +1198,7 @@ app.post("/ai-audit/update/:id", (req, res) => {
     }
     throw err;
   }
+  invalidateAiAuditOlapCache(target.id);
   res.redirect(`/ai-audit/${target.id}`);
 });
 
@@ -1070,8 +1208,33 @@ app.post("/ai-audit/delete/:id", (req, res) => {
     return res.status(404).render("ai_audit_delete", { data: null, id: req.params.id });
   }
   aiAuditDb.prepare(AI_AUDIT_SQL.deleteById).run(target.id);
+  invalidateAiAuditOlapCache(target.id);
   res.redirect("/ai-audit");
 });
 
+app.use((err, req, res, next) => {
+  console.error(err);
+  const listUrl = req.path.startsWith("/classes")
+    ? "/classes"
+    : req.path.startsWith("/backlog")
+      ? "/backlog"
+      : "/ai-audit";
+  res.status(500).render("error", {
+    title: "サーバエラー",
+    error: "サーバ内部でエラーが発生しました。",
+    backUrl: null,
+    listUrl
+  });
+});
+
 const PORT = Number(process.env.PORT) || 8080;
-app.listen(PORT, () => console.log(`Example app listening on port ${PORT}!`));
+const server = app.listen(PORT, () => console.log(`Example app listening on port ${PORT}!`));
+
+function shutdownOlap() {
+  server.close(() => {
+    Promise.resolve(olapConn ? olapConn.close() : null).finally(() => process.exit(0));
+  });
+}
+
+process.on("SIGINT", shutdownOlap);
+process.on("SIGTERM", shutdownOlap);

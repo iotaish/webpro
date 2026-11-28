@@ -1,0 +1,29 @@
+source: ai_models is duckdb.table('ai_models') extend {
+  primary_key: id
+}
+
+source: ai_audits is duckdb.table('ai_audits') extend {
+  primary_key: id
+  join_one: ai_models with modelId
+
+  dimension:
+    monthlySubCostUsd is
+      pick contractFeeUsd / 12.0 when billingCycle = '年額'
+      pick contractFeeUsd        when billingCycle = '月額'
+      else 0.0
+    apiEquivalentUsd is inputTokensM * ai_models.inputPricePer1M
+      + outputTokensM * ai_models.outputPricePer1M
+    savingsUsd is apiEquivalentUsd - monthlySubCostUsd
+
+  measure:
+    itemCount is count()
+    totalSubUsd is round(monthlySubCostUsd.sum(), 2)
+    totalApiUsd is round(apiEquivalentUsd.sum(), 2)
+    totalSavingsUsd is round(savingsUsd.sum(), 2)
+
+  view: cross_summary is {
+    group_by: ai_models.provider, ai_models.grade
+    aggregate: itemCount, totalSubUsd, totalApiUsd, totalSavingsUsd
+    order_by: provider asc, grade asc
+  }
+}
