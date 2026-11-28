@@ -205,6 +205,29 @@ function openSqliteDb(envKey, defaultFilename) {
   return { db: database, exists };
 }
 
+function loadSqlQueries(filename) {
+  const raw = fs.readFileSync(path.join(__dirname, "sql", filename), "utf8");
+  const queries = {};
+  let currentName = null;
+  let buffer = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const match = line.match(/^--\s*name:\s*(\w+)\s*$/);
+    if (match) {
+      if (currentName) {
+        queries[currentName] = buffer.join("\n").trim();
+      }
+      currentName = match[1];
+      buffer = [];
+    } else if (currentName) {
+      buffer.push(line);
+    }
+  }
+  if (currentName) {
+    queries[currentName] = buffer.join("\n").trim();
+  }
+  return queries;
+}
+
 function parsePositiveIntId(raw) {
   const id = Number(raw);
   return Number.isInteger(id) && id > 0 ? id : null;
@@ -264,56 +287,42 @@ const INITIAL_CLASSES = [
   }
 ];
 
+const CLASS_SQL = loadSqlQueries("classes.sql");
+
 function createClassesTable(database) {
-  database.exec(`
-    CREATE TABLE classes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      course TEXT NOT NULL,
-      day TEXT NOT NULL,
-      period TEXT NOT NULL,
-      room TEXT NOT NULL,
-      teacher TEXT NOT NULL DEFAULT '',
-      credits INTEGER NOT NULL DEFAULT 2,
-      memo TEXT NOT NULL DEFAULT ''
-    )
-  `);
+  database.exec(CLASS_SQL.createTable);
 }
 
 if (!dbExists) {
   createClassesTable(db);
-  const insert = db.prepare(
-    "INSERT INTO classes (course, day, period, room, teacher, credits, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  );
+  const insert = db.prepare(CLASS_SQL.insert);
   for (const item of INITIAL_CLASSES) {
     insert.run(item.course, item.day, item.period, item.room, item.teacher, item.credits, item.memo);
   }
 } else {
   const existingCols = new Set(
-    db.prepare("PRAGMA table_info(classes)").all().map((col) => col.name)
+    db.prepare(CLASS_SQL.tableInfo).all().map((col) => col.name)
   );
   if (existingCols.size === 0) {
     createClassesTable(db);
   } else {
     if (!existingCols.has("teacher")) {
-      db.exec("ALTER TABLE classes ADD COLUMN teacher TEXT NOT NULL DEFAULT ''");
+      db.exec(CLASS_SQL.addTeacherColumn);
     }
     if (!existingCols.has("credits")) {
-      db.exec("ALTER TABLE classes ADD COLUMN credits INTEGER NOT NULL DEFAULT 2");
+      db.exec(CLASS_SQL.addCreditsColumn);
     }
     if (!existingCols.has("memo")) {
-      db.exec("ALTER TABLE classes ADD COLUMN memo TEXT NOT NULL DEFAULT ''");
+      db.exec(CLASS_SQL.addMemoColumn);
     }
   }
 }
 
 const ALLOWED_CLASS_DAYS = ["月", "火", "水", "木", "金", "土"];
-const CLASS_COLUMNS = "id, course, day, period, room, teacher, credits, memo";
 
 function findClassById(rawId) {
   const id = parsePositiveIntId(rawId);
-  return id
-    ? db.prepare(`SELECT ${CLASS_COLUMNS} FROM classes WHERE id = ?`).get(id)
-    : null;
+  return id ? db.prepare(CLASS_SQL.findById).get(id) : null;
 }
 
 function parseClassPayload(body) {
@@ -351,24 +360,14 @@ function parseClassPayload(body) {
 
 app.get("/classes", (req, res) => {
   const dayFilter = typeof req.query.day === "string" ? req.query.day.trim() : "";
-  const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+  const rawQ = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const keyword = rawQ.toLowerCase();
+  const likePattern = `%${keyword}%`;
 
-  const conditions = [];
-  const params = [];
-  if (dayFilter) {
-    conditions.push("day = ?");
-    params.push(dayFilter);
-  }
-  if (keyword) {
-    conditions.push("(LOWER(course) LIKE ? OR LOWER(room) LIKE ? OR LOWER(teacher) LIKE ? OR LOWER(memo) LIKE ?)");
-    const likePattern = `%${keyword}%`;
-    params.push(likePattern, likePattern, likePattern, likePattern);
-  }
-
-  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-  const rows = db.prepare(
-    `SELECT ${CLASS_COLUMNS} FROM classes${whereClause} ORDER BY id ASC`
-  ).all(...params);
+  const rows = db.prepare(CLASS_SQL.list).all(
+    dayFilter, dayFilter,
+    keyword, likePattern, likePattern, likePattern, likePattern
+  );
 
   res.render("classes", {
     data: rows,
@@ -412,9 +411,9 @@ app.post("/classes", (req, res) => {
     return renderBadRequest(res, parsed.error, "/classes/create", "/classes");
   }
   const v = parsed.value;
-  db.prepare(
-    "INSERT INTO classes (course, day, period, room, teacher, credits, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo);
+  db.prepare(CLASS_SQL.insert).run(
+    v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo
+  );
   res.redirect("/classes");
 });
 
@@ -432,9 +431,9 @@ app.post("/classes/update/:id", (req, res) => {
     });
   }
   const v = parsed.value;
-  db.prepare(
-    "UPDATE classes SET course = ?, day = ?, period = ?, room = ?, teacher = ?, credits = ?, memo = ? WHERE id = ?"
-  ).run(v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, target.id);
+  db.prepare(CLASS_SQL.update).run(
+    v.course, v.day, v.period, v.room, v.teacher, v.credits, v.memo, target.id
+  );
   res.redirect(`/classes/${target.id}`);
 });
 
@@ -443,7 +442,7 @@ app.post("/classes/delete/:id", (req, res) => {
   if (!target) {
     return res.status(404).render("classes_delete", { data: null, id: req.params.id });
   }
-  db.prepare("DELETE FROM classes WHERE id = ?").run(target.id);
+  db.prepare(CLASS_SQL.deleteById).run(target.id);
   res.redirect("/classes");
 });
 
@@ -451,9 +450,7 @@ const { db: backlogDb, exists: backlogDbExists } = openSqliteDb("BACKLOG_DB_PATH
 
 function findBacklogById(rawId) {
   const id = parsePositiveIntId(rawId);
-  return id
-    ? backlogDb.prepare(`SELECT ${BACKLOG_COLUMNS} FROM backlog WHERE id = ?`).get(id)
-    : null;
+  return id ? backlogDb.prepare(BACKLOG_SQL.findById).get(id) : null;
 }
 
 const INITIAL_BACKLOG = [
@@ -504,26 +501,15 @@ const INITIAL_BACKLOG = [
   }
 ];
 
+const BACKLOG_SQL = loadSqlQueries("backlog.sql");
+
 function createBacklogTable(database) {
-  database.exec(`
-    CREATE TABLE backlog (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      type TEXT NOT NULL,
-      platform TEXT NOT NULL,
-      yearsStacked INTEGER NOT NULL DEFAULT 0,
-      estimatedHours INTEGER NOT NULL DEFAULT 10,
-      status TEXT NOT NULL DEFAULT '未着手',
-      memo TEXT NOT NULL DEFAULT ''
-    )
-  `);
+  database.exec(BACKLOG_SQL.createTable);
 }
 
 if (!backlogDbExists) {
   createBacklogTable(backlogDb);
-  const insertBacklog = backlogDb.prepare(
-    "INSERT INTO backlog (title, type, platform, yearsStacked, estimatedHours, status, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  );
+  const insertBacklog = backlogDb.prepare(BACKLOG_SQL.insert);
   for (const item of INITIAL_BACKLOG) {
     insertBacklog.run(
       item.title,
@@ -536,7 +522,7 @@ if (!backlogDbExists) {
     );
   }
 } else {
-  const existingCols = backlogDb.prepare("PRAGMA table_info(backlog)").all();
+  const existingCols = backlogDb.prepare(BACKLOG_SQL.tableInfo).all();
   if (existingCols.length === 0) {
     createBacklogTable(backlogDb);
   }
@@ -544,7 +530,6 @@ if (!backlogDbExists) {
 
 const ALLOWED_BACKLOG_TYPES = ["ゲーム", "書籍"];
 const ALLOWED_BACKLOG_STATUSES = ["未着手", "進行中", "完了", "断念"];
-const BACKLOG_COLUMNS = "id, title, type, platform, yearsStacked, estimatedHours, status, memo";
 
 function parseOptionalInt(raw, fallback) {
   if (raw === undefined || raw === null || raw === "") {
@@ -598,28 +583,15 @@ function parseBacklogPayload(body) {
 app.get("/backlog", (req, res) => {
   const typeFilter = typeof req.query.type === "string" ? req.query.type.trim() : "";
   const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : "";
-  const keyword = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+  const rawQ = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const keyword = rawQ.toLowerCase();
+  const likePattern = `%${keyword}%`;
 
-  const conditions = [];
-  const params = [];
-  if (typeFilter) {
-    conditions.push("type = ?");
-    params.push(typeFilter);
-  }
-  if (statusFilter) {
-    conditions.push("status = ?");
-    params.push(statusFilter);
-  }
-  if (keyword) {
-    conditions.push("(LOWER(title) LIKE ? OR LOWER(platform) LIKE ? OR LOWER(memo) LIKE ?)");
-    const likePattern = `%${keyword}%`;
-    params.push(likePattern, likePattern, likePattern);
-  }
-
-  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-  const rows = backlogDb.prepare(
-    `SELECT ${BACKLOG_COLUMNS} FROM backlog${whereClause} ORDER BY id ASC`
-  ).all(...params);
+  const rows = backlogDb.prepare(BACKLOG_SQL.list).all(
+    typeFilter, typeFilter,
+    statusFilter, statusFilter,
+    keyword, likePattern, likePattern, likePattern
+  );
 
   res.render("backlog", {
     data: rows,
@@ -685,9 +657,9 @@ app.post("/backlog", (req, res) => {
     return renderBadRequest(res, parsed.error, "/backlog/create", "/backlog");
   }
   const v = parsed.value;
-  backlogDb.prepare(
-    "INSERT INTO backlog (title, type, platform, yearsStacked, estimatedHours, status, memo) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo);
+  backlogDb.prepare(BACKLOG_SQL.insert).run(
+    v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo
+  );
   res.redirect("/backlog");
 });
 
@@ -712,9 +684,9 @@ app.post("/backlog/update/:id", (req, res) => {
     });
   }
   const v = parsed.value;
-  backlogDb.prepare(
-    "UPDATE backlog SET title = ?, type = ?, platform = ?, yearsStacked = ?, estimatedHours = ?, status = ?, memo = ? WHERE id = ?"
-  ).run(v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, target.id);
+  backlogDb.prepare(BACKLOG_SQL.update).run(
+    v.title, v.type, v.platform, v.yearsStacked, v.estimatedHours, v.status, v.memo, target.id
+  );
   res.redirect(`/backlog/${target.id}`);
 });
 
@@ -723,7 +695,7 @@ app.post("/backlog/delete/:id", (req, res) => {
   if (!target) {
     return res.status(404).render("backlog_delete", { data: null, id: req.params.id });
   }
-  backlogDb.prepare("DELETE FROM backlog WHERE id = ?").run(target.id);
+  backlogDb.prepare(BACKLOG_SQL.deleteById).run(target.id);
   res.redirect("/backlog");
 });
 
@@ -791,41 +763,19 @@ const INITIAL_AI_AUDITS = [
   }
 ];
 
+const AI_AUDIT_SQL = loadSqlQueries("ai_audit.sql");
+
 function createAiAuditTables(database) {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS ai_models (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      provider TEXT NOT NULL,
-      modelName TEXT NOT NULL,
-      grade TEXT NOT NULL,
-      inputPricePer1M REAL NOT NULL,
-      outputPricePer1M REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS ai_audits (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      serviceName TEXT NOT NULL,
-      modelId INTEGER NOT NULL,
-      billingCycle TEXT NOT NULL,
-      contractFeeUsd REAL NOT NULL DEFAULT 0,
-      inputTokensM REAL NOT NULL DEFAULT 0,
-      outputTokensM REAL NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT '継続中',
-      memo TEXT NOT NULL DEFAULT ''
-    );
-  `);
+  database.exec(AI_AUDIT_SQL.createTables);
 }
 
 if (!aiAuditDbExists) {
   createAiAuditTables(aiAuditDb);
-  const insertModel = aiAuditDb.prepare(
-    "INSERT INTO ai_models (provider, modelName, grade, inputPricePer1M, outputPricePer1M) VALUES (?, ?, ?, ?, ?)"
-  );
+  const insertModel = aiAuditDb.prepare(AI_AUDIT_SQL.insertModel);
   for (const model of INITIAL_AI_MODELS) {
     insertModel.run(model.provider, model.modelName, model.grade, model.inputPricePer1M, model.outputPricePer1M);
   }
-  const insertAudit = aiAuditDb.prepare(
-    "INSERT INTO ai_audits (serviceName, modelId, billingCycle, contractFeeUsd, inputTokensM, outputTokensM, status, memo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  );
+  const insertAudit = aiAuditDb.prepare(AI_AUDIT_SQL.insertAudit);
   for (const item of INITIAL_AI_AUDITS) {
     insertAudit.run(
       item.serviceName,
@@ -839,8 +789,8 @@ if (!aiAuditDbExists) {
     );
   }
 } else {
-  const existingModels = aiAuditDb.prepare("PRAGMA table_info(ai_models)").all();
-  const existingAudits = aiAuditDb.prepare("PRAGMA table_info(ai_audits)").all();
+  const existingModels = aiAuditDb.prepare(AI_AUDIT_SQL.modelsTableInfo).all();
+  const existingAudits = aiAuditDb.prepare(AI_AUDIT_SQL.auditsTableInfo).all();
   if (existingModels.length === 0 || existingAudits.length === 0) {
     createAiAuditTables(aiAuditDb);
   }
@@ -849,33 +799,6 @@ if (!aiAuditDbExists) {
 const ALLOWED_AI_GRADES = ["Frontier", "Standard", "Mini"];
 const ALLOWED_AI_BILLING_CYCLES = ["月額", "年額", "従量のみ"];
 const ALLOWED_AI_STATUSES = ["継続中", "要見直し", "解約候補"];
-
-const AI_MONTHLY_COST_SQL =
-  "CASE WHEN a.billingCycle = '年額' THEN a.contractFeeUsd / 12.0 WHEN a.billingCycle = '月額' THEN a.contractFeeUsd ELSE 0.0 END";
-const AI_API_EQUIV_SQL =
-  "(a.inputTokensM * m.inputPricePer1M + a.outputTokensM * m.outputPricePer1M)";
-const AI_AUDIT_SELECT = `
-  SELECT
-    a.id,
-    a.serviceName,
-    a.modelId,
-    a.billingCycle,
-    a.contractFeeUsd,
-    a.inputTokensM,
-    a.outputTokensM,
-    a.status,
-    a.memo,
-    m.provider,
-    m.modelName,
-    m.grade,
-    m.inputPricePer1M,
-    m.outputPricePer1M,
-    (${AI_MONTHLY_COST_SQL}) AS monthlySubCostUsd,
-    (${AI_API_EQUIV_SQL}) AS apiEquivalentUsd,
-    ((${AI_API_EQUIV_SQL}) - (${AI_MONTHLY_COST_SQL})) AS savingsUsd
-  FROM ai_audits a
-  JOIN ai_models m ON a.modelId = m.id
-`;
 
 function parseOptionalNumber(raw, fallback) {
   if (raw === undefined || raw === null) {
@@ -891,9 +814,7 @@ function parseOptionalNumber(raw, fallback) {
 }
 
 function listAiModels() {
-  return aiAuditDb
-    .prepare("SELECT id, provider, modelName, grade, inputPricePer1M, outputPricePer1M FROM ai_models ORDER BY id ASC")
-    .all();
+  return aiAuditDb.prepare(AI_AUDIT_SQL.listModels).all();
 }
 
 function findAiAuditById(rawId) {
@@ -901,7 +822,7 @@ function findAiAuditById(rawId) {
   if (!id) {
     return null;
   }
-  return aiAuditDb.prepare(`${AI_AUDIT_SELECT} WHERE a.id = ?`).get(id) || null;
+  return aiAuditDb.prepare(AI_AUDIT_SQL.findById).get(id) || null;
 }
 
 function buildAiAuditFilter(query) {
@@ -909,29 +830,17 @@ function buildAiAuditFilter(query) {
   const statusFilter = typeof query.status === "string" ? query.status.trim() : "";
   const rawQ = typeof query.q === "string" ? query.q.trim() : "";
   const keyword = rawQ.toLowerCase();
-
-  const conditions = [];
-  const params = [];
-  if (gradeFilter) {
-    conditions.push("m.grade = ?");
-    params.push(gradeFilter);
-  }
-  if (statusFilter) {
-    conditions.push("a.status = ?");
-    params.push(statusFilter);
-  }
-  if (keyword) {
-    conditions.push("(LOWER(a.serviceName) LIKE ? OR LOWER(m.modelName) LIKE ? OR LOWER(m.provider) LIKE ? OR LOWER(a.memo) LIKE ?)");
-    const likePattern = `%${keyword}%`;
-    params.push(likePattern, likePattern, likePattern, likePattern);
-  }
+  const likePattern = `%${keyword}%`;
 
   return {
     gradeFilter,
     statusFilter,
     rawQ,
-    whereClause: conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "",
-    params
+    filterParams: [
+      gradeFilter, gradeFilter,
+      statusFilter, statusFilter,
+      keyword, likePattern, likePattern, likePattern, likePattern
+    ]
   };
 }
 
@@ -949,7 +858,7 @@ function parseAiAuditPayload(body) {
   if (!serviceName || !modelId || !billingCycle) {
     return { error: "サービス・プラン名・利用モデル・契約周期は必須です。" };
   }
-  const modelExists = aiAuditDb.prepare("SELECT id FROM ai_models WHERE id = ?").get(modelId);
+  const modelExists = aiAuditDb.prepare(AI_AUDIT_SQL.findModelId).get(modelId);
   if (!modelExists) {
     return { error: "指定された利用モデルが存在しません。" };
   }
@@ -984,24 +893,9 @@ function parseAiAuditPayload(body) {
 }
 
 app.get("/ai-audit", (req, res) => {
-  const { gradeFilter, statusFilter, rawQ, whereClause, params } = buildAiAuditFilter(req.query);
-  const rows = aiAuditDb
-    .prepare(`${AI_AUDIT_SELECT}${whereClause} ORDER BY a.id ASC`)
-    .all(...params);
-  const crossSummary = aiAuditDb.prepare(`
-    SELECT
-      m.provider,
-      m.grade,
-      COUNT(*) AS itemCount,
-      ROUND(SUM(${AI_MONTHLY_COST_SQL}), 2) AS totalSubUsd,
-      ROUND(SUM(${AI_API_EQUIV_SQL}), 2) AS totalApiUsd,
-      ROUND(SUM((${AI_API_EQUIV_SQL}) - (${AI_MONTHLY_COST_SQL})), 2) AS totalSavingsUsd
-    FROM ai_audits a
-    JOIN ai_models m ON a.modelId = m.id
-    ${whereClause}
-    GROUP BY m.provider, m.grade
-    ORDER BY m.provider ASC, CASE m.grade WHEN 'Frontier' THEN 1 WHEN 'Standard' THEN 2 ELSE 3 END ASC
-  `).all(...params);
+  const { gradeFilter, statusFilter, rawQ, filterParams } = buildAiAuditFilter(req.query);
+  const rows = aiAuditDb.prepare(AI_AUDIT_SQL.list).all(...filterParams);
+  const crossSummary = aiAuditDb.prepare(AI_AUDIT_SQL.crossSummary).all(...filterParams);
 
   res.render("ai_audit", {
     data: rows,
@@ -1062,9 +956,9 @@ app.post("/ai-audit", (req, res) => {
     return renderBadRequest(res, parsed.error, "/ai-audit/create", "/ai-audit");
   }
   const v = parsed.value;
-  aiAuditDb.prepare(
-    "INSERT INTO ai_audits (serviceName, modelId, billingCycle, contractFeeUsd, inputTokensM, outputTokensM, status, memo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo);
+  aiAuditDb.prepare(AI_AUDIT_SQL.insertAudit).run(
+    v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo
+  );
   res.redirect("/ai-audit");
 });
 
@@ -1092,9 +986,9 @@ app.post("/ai-audit/update/:id", (req, res) => {
     });
   }
   const v = parsed.value;
-  aiAuditDb.prepare(
-    "UPDATE ai_audits SET serviceName = ?, modelId = ?, billingCycle = ?, contractFeeUsd = ?, inputTokensM = ?, outputTokensM = ?, status = ?, memo = ? WHERE id = ?"
-  ).run(v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo, target.id);
+  aiAuditDb.prepare(AI_AUDIT_SQL.update).run(
+    v.serviceName, v.modelId, v.billingCycle, v.contractFeeUsd, v.inputTokensM, v.outputTokensM, v.status, v.memo, target.id
+  );
   res.redirect(`/ai-audit/${target.id}`);
 });
 
@@ -1103,7 +997,7 @@ app.post("/ai-audit/delete/:id", (req, res) => {
   if (!target) {
     return res.status(404).render("ai_audit_delete", { data: null, id: req.params.id });
   }
-  aiAuditDb.prepare("DELETE FROM ai_audits WHERE id = ?").run(target.id);
+  aiAuditDb.prepare(AI_AUDIT_SQL.deleteById).run(target.id);
   res.redirect("/ai-audit");
 });
 
